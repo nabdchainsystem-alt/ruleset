@@ -242,45 +242,83 @@ These are gaps in the *tests*, not known failures.
 
 ---
 
-## 5. Browser matrix *(to fill in)*
+## 5. Browser matrix
 
-| Browser | Version | Platform | Game | GLOBAL SEA | Notes |
-|---|---|---|---|---|---|
-| Chrome | | macOS | | | |
-| Safari | | macOS | | | |
-| Firefox | | macOS | | | |
-| Safari | | iOS | | | |
-| Chrome | | Android | | | |
+Automated, against the **real production file set** served with the **real
+`vercel.json` headers including the CSP** — `node browser-tests.mjs`, 98
+assertions, 0 failures.
 
-Things worth pointing at specifically, because they are the parts most likely to
-differ per engine:
+| Engine | Version | How | Game | Verdict |
+|---|---|---|---|---|
+| Chromium | Playwright 1.62 (Chrome 151) | automated | boot · drag · touch · save · RTL · CSP · mobile | **PASS** |
+| WebKit *(Safari engine)* | Playwright 1.62 | automated | boot · drag · save · RTL · CSP · mobile | **PASS** |
+| Firefox | Playwright 153 | automated | boot · drag · save · RTL · CSP · mobile | **PASS** |
+| Safari | — | macOS app | not driven | **UNTESTED** |
+| Safari | — | iOS device | not driven | **UNTESTED** |
+| Chrome | — | Android device | not driven | **UNTESTED** |
 
-- pointer events + `setPointerCapture` (every drag, and B07/B17's hand-rolled
-  handlers)
-- `visualViewport` (levels 6 and 7 depend on it)
-- `color-mix(in srgb, …)` — used throughout `styles.css` and `breaks2.css`
-- CSS `rotateY` / 3D transforms (B07's card)
-- `localStorage` availability and quota (private windows)
-- Server-Sent Events (co-op only)
+What each engine is actually asserted to do: load with its title; render the
+instruction; build level 1; report 75 stages; lift the word "end" out of
+flowing text and keep it **under the pointer** (< 30px) and **at full size**
+(> 20px); solve level 1 the way it is meant to be solved; persist a solved
+stage across a reload; reveal a hint; restart; flip the theme; switch to
+Arabic and back with the Echo Mark pinned LTR; build an ECHO stage, a late
+interleaved stage and the finale without failing; 404 on all four answer-key
+paths; and produce **zero console errors** throughout.
+
+### Verified per-engine, beyond "it loads"
+
+- **Touch.** Level 1 is solvable by finger on a 375×667 phone, and the drag
+  does not scroll the page out from under the player. Driven through CDP
+  `Input.dispatchTouchEvent`, which the browser turns into real pointer
+  events — dispatching synthetic `touchstart` proves nothing here, because
+  the engine drags with Pointer Events + `setPointerCapture` and browsers do
+  not synthesise those from scripted touch. **Chromium only: Playwright
+  exposes no CDP for WebKit, so WebKit's touch path is UNTESTED, not assumed
+  green.**
+- **Storage that refuses writes.** Safari private browsing exposes
+  `localStorage` and throws on every write. All three engines boot, render
+  and stay playable; progress simply does not persist. No crash, no failure
+  card, no thrown error.
+- **Corrupted saves.** Seven payloads written into `ruleset:v1` before boot —
+  truncated JSON, `null`, a bare array, wrong types throughout, a `solved`
+  list poisoned with `null`/`{}`/`true`/`"undefined"`/`NaN`/`-5`/`1e12`, a
+  200 000-character key, and an unknown future schema. All seven boot with a
+  rendered stage, a rendered instruction and **zero page errors**.
+- **The CSP.** No violations on `/index.html`, two ECHO stages, a late
+  interleaved stage, or `/global.html`, and every stage still renders. The
+  policy carries no `'unsafe-inline'` at all.
+
+### Still engine-sensitive, and why it is acceptable
+
+`visualViewport` (levels 6–7), `color-mix(in srgb, …)`, and `rotateY` (B07's
+card) are all baseline-supported in the three engines tested. Real Safari on
+iOS remains the largest untested surface; it shares WebKit with the automated
+run, but not its input stack or its viewport behaviour.
 
 ---
 
-## 6. Viewport matrix *(to fill in)*
+## 6. Viewport matrix
 
-| Width | Height | Game | Notes |
-|---|---|---|---|
-| 320 | 568 | | smallest phone worth supporting |
-| 390 | 844 | | |
-| 430 | 932 | | the width the Break levels were designed against |
-| 768 | 1024 | | tablet portrait |
-| 1280 | 800 | | laptop |
-| 1920 | 1080 | | desktop |
+Automated overflow detection plus screenshots read by eye. No horizontal
+overflow is permitted anywhere: asserted as
+`document.documentElement.scrollWidth - clientWidth <= 1`.
 
-Stages that specifically need eyes at narrow widths, because they compute their
-own geometry: B09 (two clusters, clamped), B12 (the disc triangle's footprint),
-B10 (ball scales with stage height), B16 (plate measured from the pads), B26
-(slab spacing at 0.19w), B30 (four objects at fixed fractions), and the ECHO
-Memory Wall in level 45 (29 tiles).
+| Width × Height | Covered by | Verdict |
+|---|---|---|
+| 375 × 667 | cross-engine ×3 + full 75-stage probe | **PASS** |
+| 390 × 844 | layout audit | **PASS** |
+| 430 × 932 | layout audit | **PASS** |
+| 820 × 1180 | layout audit | **PASS** |
+| 1024 × 768 | layout audit | **PASS** |
+| 1366 × 768 | layout audit | **PASS** |
+| 1440 × 900 | layout audit + full 75-stage probe | **PASS** |
+| 1920 × 1080 | layout audit | **PASS** |
+| 320 × 568 | not tested | **OUT OF SCOPE** — below the supported floor |
+
+375×667 additionally asserts that the Hint button stays reachable and the
+board keeps a usable width (> 200px), because "no overflow" can be satisfied
+by squeezing the game into something unplayable.
 
 ---
 
