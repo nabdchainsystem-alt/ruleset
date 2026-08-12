@@ -66,7 +66,17 @@
 }
 .brk-shift.is-gone { opacity: 0; }
 .brk-bar-lite { border-radius: 99px; transform-origin: 50% 50%; }
-.brk-word {
+
+/* B13 in breaks2.css owns the bare `.brk-word` — a 34px word read against its
+   own reflection. B29/B30 reuse the name for a 17px label, and because this
+   file loads last the bare rule here won overwrote B13 everywhere: B13 drew a
+   17px word beside a 34px reflection.
+   The markup always pairs this label with a class of its own (`brk-shift` on
+   B29, `brk-part` on B30), so match on the pair. That is order-independent —
+   it no longer matters which stylesheet loads last.
+   The real fix is a rename in breaks4.js; that file is not this one's to edit. */
+.brk-word.brk-shift,
+.brk-word.brk-part {
   position: absolute;
   background: none;
   font-family: var(--mono);
@@ -148,6 +158,9 @@
 .brk-said-b.is-on { opacity: 1; }
 
 @media (max-width: 620px) {
-  .brk-word { font-size: 14px; letter-spacing: .1em; }
+  /* scoped for the same reason as the base rule above — B13's word is not this
+     file's to shrink */
+  .brk-word.brk-shift,
+  .brk-word.brk-part { font-size: 14px; letter-spacing: .1em; }
   .brk-said-a, .brk-said-b { font-size: 12px; letter-spacing: .12em; }
 }

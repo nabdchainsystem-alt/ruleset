@@ -158,6 +158,36 @@ function dropType(el) {
 }
 
 function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (err) {} }
+
+/* An object dragged clean out of the window is gone: nothing is left to grab,
+   and the only way back is Restart. No puzzle in the game asks for that, so a
+   drop that lands entirely outside gets nudged back until a corner of it is
+   reachable again.
+
+   Deliberately on release rather than per frame — clamping during the move
+   would fight the magnet, a level's own clampX, and the panned world in level
+   14. And levels that declare their own bounds are left alone entirely.
+
+   The delta is converted out of screen pixels, because levels 6 and 7 leave
+   the page genuinely zoomed and a screen pixel is not a layout pixel there. */
+function rescue(el, opts) {
+  if (!el || !el.isConnected) return;
+  if (opts && (opts.bounds || opts.clampX)) return;
+  const r = rectOf(el);
+  if (!r.width && !r.height) return;
+  const M = 28;                       // how much must stay reachable
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let dx = 0, dy = 0;
+  if (r.right  < M)      dx = M - r.right;
+  else if (r.left > vw - M) dx = (vw - M) - r.left;
+  if (r.bottom < M)      dy = M - r.bottom;
+  else if (r.top  > vh - M) dy = (vh - M) - r.top;
+  if (!dx && !dy) return;
+  const scale = el.offsetWidth ? (r.width / el.offsetWidth) || 1 : 1;
+  const left = parseFloat(el.style.left), top = parseFloat(el.style.top);
+  if (Number.isFinite(left)) el.style.left = (left + dx / scale) + 'px';
+  if (Number.isFinite(top))  el.style.top  = (top + dy / scale) + 'px';
+}
 function release(el, e) { try { el.releasePointerCapture(e.pointerId); } catch (err) {} }
 
 /* =========================================================================
@@ -358,6 +388,7 @@ class LevelContext {
       live = false;
       el.classList.remove('is-dragging');
       release(el, e);
+      rescue(el, opts);
       const kill = wantsDiscard();
       if (opts.discard) { this._showVoid(false); this._hotVoid(false); }
       if (kill && opts.onDiscard) opts.onDiscard(el, e);

@@ -2245,6 +2245,39 @@ window.addEventListener('unhandledrejection', e => {
         ' stages set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
   }
 
+  /* --------------------------------------------- engine: lost objects --
+     An object dragged clean out of the window cannot be grabbed again, and
+     Restart is the only way back. No puzzle asks for that. */
+  {
+    const w = await loadLevel(1);
+    const d = w.document;
+    const word = d.querySelector('[data-word="end"]');
+    const r0 = word.getBoundingClientRect();
+    const send = (type, x, y) => word.dispatchEvent(new w.PointerEvent(type,
+      { clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
+    send('pointerdown', r0.left + 5, r0.top + 5);
+    send('pointermove', -3000, -3000);
+    send('pointerup', -3000, -3000);
+    await wait(80);
+    const r1 = word.getBoundingClientRect();
+    log(r1.right > 0 && r1.bottom > 0 && r1.left < w.innerWidth && r1.top < w.innerHeight,
+        'an object dropped outside the window is brought back within reach');
+
+    /* and the rescue must not disturb an ordinary drop */
+    const w2 = await loadLevel(1);
+    const d2 = w2.document;
+    const word2 = d2.querySelector('[data-word="end"]');
+    const dot = d2.querySelector('#stage .dot');
+    const wr = word2.getBoundingClientRect(), dr = dot.getBoundingClientRect();
+    const send2 = (type, x, y) => word2.dispatchEvent(new w2.PointerEvent(type,
+      { clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
+    send2('pointerdown', wr.left + wr.width / 2, wr.top + wr.height / 2);
+    send2('pointermove', dr.left + dr.width / 2, dr.top + dr.height / 2);
+    send2('pointerup', dr.left + dr.width / 2, dr.top + dr.height / 2);
+    await wait(160);
+    log(w2.RULESET.solvedNow, 'a normal drop still solves — the rescue does not move ordinary drags');
+  }
+
   /* ------------------------------------------- engine: failure states --
      A stage is a hand-written script and any of them can throw. What must
      never happen is a player left on a blank board with no way out. */
