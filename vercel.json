@@ -1,42 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
-  "//": "RULESET is a folder of static files with no build step. These three keys say that explicitly rather than leaving Vercel to infer it — a deploy that inferred wrong served `404 — not in /var/task`, which is the serverless runtime answering for a project that has no functions at all.",
-  "framework": null,
-  "buildCommand": null,
-  "installCommand": null,
-  "outputDirectory": ".",
+  "//": "RULESET has no framework and no bundler. Vercel's zero-config detection failed twice here with '404 - not in /var/task' (the serverless runtime answering for a project with no functions, because the build emitted no static output), so the deployable site is written explicitly by build.sh using the Build Output API. Routes, headers and the CSP live in .vercel/output/config.json, which build.sh generates - not here, because with the Build Output API that file is the authority.",
 
-  "//rewrites": "The landing page is the front door; index.html stays exactly where it is so every test, every relative link and `open index.html` off the disk keep working. Only the bare root is rewritten — nothing else, so the 404s that hide the answer key still 404.",
-  "rewrites": [
-    { "source": "/", "destination": "/home.html" },
-    { "source": "/play", "destination": "/index.html" }
-  ],
-
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
-        }
-      ]
-    },
-    {
-      "source": "/(.*)\\.(js|css|svg)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    },
-    {
-      "source": "/(.*)\\.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    }
-  ]
+  "buildCommand": "./build.sh",
+  "installCommand": "echo 'no dependencies'",
+  "framework": null
 }

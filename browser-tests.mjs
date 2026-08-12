@@ -19,40 +19,37 @@ import { chromium, webkit, firefox } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, dirname } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = 8749;
-const cfg = JSON.parse(await readFile(join(ROOT, 'vercel.json'), 'utf8'));
-const IGNORE = (await readFile(join(ROOT, '.vercelignore'), 'utf8'))
-  .split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+/* Serve the REAL deployable output, built the way Vercel builds it, rather
+   than the repository with exclusions applied by hand. If build.sh and the
+   deploy ever disagree, this is where it shows up. */
+execFileSync(join(ROOT, 'build.sh'), { cwd: ROOT, stdio: 'ignore' });
+const SITE = join(ROOT, '.vercel', 'output', 'static');
+const cfg = JSON.parse(await readFile(join(ROOT, '.vercel', 'output', 'config.json'), 'utf8'));
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
                 '.json': 'application/json', '.svg': 'image/svg+xml' };
 
-/* A request for a file .vercelignore excludes must 404 exactly as it would in
-   production — otherwise the test is not testing the shipped build. */
-const excluded = path => IGNORE.some(pat => {
-  if (pat.endsWith('/')) return path.startsWith('/' + pat) || path === '/' + pat.slice(0, -1);
-  if (pat.startsWith('*')) return path.endsWith(pat.slice(1));
-  return path === '/' + pat;
-});
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (excluded(url.pathname)) { res.writeHead(404).end('not deployed'); return; }
-  /* mirror vercel.json's rewrites so routing is tested, not assumed */
+  /* mirror the generated route table so routing is tested, not assumed */
   let routed = url.pathname;
-  for (const rw of (cfg.rewrites || [])) if (rw.source === routed) routed = rw.destination;
-  let p = normalize(join(ROOT, decodeURIComponent(routed)));
-  if (!p.startsWith(ROOT)) { res.writeHead(403).end(); return; }
+  for (const r of (cfg.routes || [])) if (r.dest && r.src === routed) routed = r.dest;
+  let p = normalize(join(SITE, decodeURIComponent(routed)));
+  if (!p.startsWith(SITE)) { res.writeHead(403).end(); return; }
   if (routed.endsWith('/')) p = join(p, 'index.html');
   try {
     const body = await readFile(p);
     const h = { 'Content-Type': TYPES[extname(p)] || 'application/octet-stream' };
-    for (const rule of cfg.headers) {
-      const re = new RegExp('^' + rule.source.replace(/\(\.\*\)/g, '.*') + '$');
-      if (re.test(url.pathname)) for (const { key, value } of rule.headers) h[key] = value;
+    for (const r of (cfg.routes || [])) {
+      if (!r.headers) continue;
+      const re = new RegExp('^' + r.src + '$');
+      if (re.test(url.pathname)) Object.assign(h, r.headers);
     }
     res.writeHead(200, h); res.end(body);
   } catch { res.writeHead(404).end('not found'); }
@@ -169,9 +166,23 @@ async function run(name, engine) {
   {
     await page.goto(BASE + '/', { waitUntil: 'load' });
     await page.waitForTimeout(400);
-    ok(await page.locator('.hero .logo').count() === 1, `${name}: / serves the landing page`);
-    ok((await page.locator('.play').getAttribute('href')) === 'index.html',
-       `${name}: the landing page's Play button points at the game`);
+    ok(await page.locator('.brand img').count() === 1, `${name}: / serves the landing page`);
+    ok(await page.locator('a[href="index.html"]').count() > 0,
+       `${name}: the landing page offers a way into the game`);
+    /* every asset the landing page asks for must actually be in the build */
+    const missing = await page.evaluate(async () => {
+      const refs = [...document.querySelectorAll('[src],[href]')]
+        .map(e => e.getAttribute('src') || e.getAttribute('href'))
+        .filter(u => u && !/^(https?:|data:|#|mailto:)/.test(u));
+      const bad = [];
+      for (const u of new Set(refs)) {
+        const r = await fetch(u, { method: 'GET' });
+        if (!r.ok) bad.push(u + ' → ' + r.status);
+      }
+      return bad;
+    });
+    ok(missing.length === 0,
+       `${name}: the landing page's assets are all in the build${missing.length ? ' → ' + missing.join(', ') : ''}`);
     await page.goto(BASE + '/play', { waitUntil: 'load' });
     await page.waitForTimeout(600);
     ok(await page.locator('#stage').count() === 1, `${name}: /play serves the game`);
