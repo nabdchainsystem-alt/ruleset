@@ -161,7 +161,11 @@ async function run(name, engine) {
   }
 
   /* ---- the answer key must not be reachable on the deployed build ---- */
-  for (const path of ['/tests.html', '/invariants.mjs', '/docs/ECHO_SPEC.md', '/server.mjs']) {
+  for (const path of ['/tests.html', '/invariants.mjs', '/docs/ECHO_SPEC.md', '/server.mjs',
+                      '/docs/BREAK_LEVELS.md', '/progress-tests.mjs', '/README.md',
+                      /* the printed guides are the worst leak of all: the hidden
+                         sentence in plaintext, plus a full solution for every level */
+                      '/output/pdf/RULESET_GAME.html', '/output/pdf/RULESET_QUICK_GUIDE.html']) {
     const r = await page.request.get(BASE + path);
     ok(r.status() === 404, `${name}: ${path} is not served to the public`);
   }
