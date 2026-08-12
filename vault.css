@@ -68,8 +68,16 @@
   to   { transform: none; opacity: 1; }
 }
 
-/* while capturing, the panel steps aside so the puzzle is visible */
-.vault.is-peek { opacity: .06; pointer-events: none; }
+/* While capturing, the panel steps aside so the puzzle is visible.
+   `animation: none` is load-bearing: the entrance above is declared `both`,
+   and a finished animation's fill still beats a normal declaration — so the
+   opacity below was being silently ignored and the panel never moved. */
+.vault.is-peek {
+  animation: none;
+  opacity: .07;
+  pointer-events: none;
+  transition: opacity .18s var(--ease);
+}
 
 /* ----------------------------------------------------------------- head -- */
 .vault-head {
@@ -110,10 +118,13 @@
 .vault-intro-b { font-size: 13px; color: var(--muted); }
 
 /* ----------------------------------------------------------------- tabs -- */
+/* the hairline is the track the active tab sits on: without it the accent
+   underline floats loose and the row reads as four unrelated words */
 .vault-tabs {
   display: flex;
   gap: 2px;
   padding: 10px 12px 0;
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 .vault-tab {
   flex: 1;
@@ -141,7 +152,6 @@
   border-bottom: 1px solid var(--line);
 }
 .vault-filters { display: flex; gap: 6px; }
-.vault-sel { flex: 1; min-width: 0; }
 .vault-acts { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .vault-input {
@@ -154,12 +164,16 @@
   font-family: var(--font);
   font-size: 12.5px;
   outline: none;
-  transition: border-color .18s var(--ease);
+  transition: border-color .18s var(--ease), box-shadow .18s var(--ease);
 }
 .vault-input:focus { border-color: var(--accent); }
 .vault-input::placeholder { color: var(--muted); }
-select.vault-input { font-size: 11.5px; cursor: pointer; }
 textarea.vault-input { resize: vertical; min-height: 56px; line-height: 1.5; }
+
+/* the field is ours; the browser's search furniture is not */
+.vault-search { -webkit-appearance: none; appearance: none; }
+.vault-search::-webkit-search-cancel-button,
+.vault-search::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
 
 .vault-btn {
   padding: 6px 11px;
@@ -169,14 +183,172 @@ textarea.vault-input { resize: vertical; min-height: 56px; line-height: 1.5; }
   color: var(--ink-soft);
   font-family: var(--font);
   font-size: 11.5px;
+  line-height: 1.4;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color .18s var(--ease), color .18s var(--ease);
+  transition: border-color .18s var(--ease), color .18s var(--ease),
+              background .18s var(--ease);
 }
 .vault-btn:hover { border-color: var(--line-2); color: var(--ink); }
+.vault-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
 .vault-danger { color: var(--muted); }
 .vault-danger:hover { color: var(--warn); border-color: var(--warn); }
 .vault-btn.is-armed { color: var(--warn); border-color: var(--warn); }
+
+/* The three add buttons carry one mark, drawn here rather than typed into
+   three labels, so they can never drift apart and the label stays the label. */
+.vault-add { display: inline-flex; align-items: center; gap: 6px; }
+.vault-add::before {
+  content: '+';
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  transition: color .18s var(--ease);
+}
+.vault-add:hover::before { color: var(--ink-soft); }
+
+/* capture, armed. The button holds the mode so it is never a mystery which
+   mode you are in. */
+.vault-btn.is-picking {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+.vault-add.is-picking::before { color: var(--accent); }
+
+/* ------------------------------------------------------------ dropdowns -- */
+/* The stage and tag filters. A native <select> brings the operating system's
+   own chrome with it and belongs to nothing else on this panel; the real
+   <select> is still underneath, holding the value, just never drawn. */
+
+.vault-native { display: none; }
+
+.vault-pick-wrap { position: relative; flex: 1; min-width: 0; }
+
+.vault-pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease),
+              box-shadow .18s var(--ease);
+}
+.vault-pick:hover { border-color: var(--line-2); color: var(--ink-soft); }
+.vault-pick:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+/* a filter that is actually filtering says so quietly */
+.vault-pick-wrap.is-set .vault-pick { color: var(--ink); border-color: var(--line-2); }
+.vault-pick-wrap.is-open .vault-pick { color: var(--ink); border-color: var(--accent); }
+
+.vault-pick-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* physical borders on purpose: a chevron points down in both directions, and
+   the logical pair would swing it sideways in Arabic */
+.vault-pick-caret {
+  flex: 0 0 auto;
+  width: 5.5px;
+  height: 5.5px;
+  margin-inline-start: 2px;
+  border-right: 1.2px solid currentColor;
+  border-bottom: 1.2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  opacity: .6;
+  transition: transform .2s var(--ease), opacity .2s var(--ease);
+}
+.vault-pick-wrap.is-open .vault-pick-caret {
+  transform: translateY(1px) rotate(225deg);
+  opacity: 1;
+}
+
+.vault-menu {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 5px);
+  z-index: 20;
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  /* the flat tint lifts the sheet off a panel of the same colour: in light it
+     is a no-op on white, in dark it is the only thing that reads as height,
+     since a black shadow on a black panel says nothing */
+  background-color: var(--panel);
+  background-image: linear-gradient(rgba(255, 255, 255, .055), rgba(255, 255, 255, .055));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .16), 0 2px 6px rgba(0, 0, 0, .05);
+  animation: vaultMenuIn .15s var(--ease-out) both;
+}
+html.is-dark .vault-menu { box-shadow: 0 18px 40px rgba(0, 0, 0, .55); }
+.vault-menu[hidden] { display: none; }
+.vault-pick-wrap.is-up .vault-menu {
+  inset-block-start: auto;
+  inset-block-end: calc(100% + 5px);
+}
+@keyframes vaultMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.vault-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background .12s var(--ease), color .12s var(--ease);
+}
+.vault-opt-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* a dot, not a tick: the Vault marks what you chose, never what is right */
+.vault-opt::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  transition: background .12s var(--ease), box-shadow .12s var(--ease);
+}
+.vault-opt.is-on { color: var(--ink); }
+.vault-opt.is-on::before { background: var(--accent); box-shadow: none; }
+/* where the pointer or the keyboard is. The accent is the colour of the
+   player's own marks, so it can highlight without ever meaning "right". */
+.vault-opt.is-active { background: var(--accent-bg); color: var(--ink); }
 
 /* ----------------------------------------------------------------- body -- */
 .vault-body {
@@ -257,7 +429,24 @@ textarea.vault-input { resize: vertical; min-height: 56px; line-height: 1.5; }
 
 .vault-rule-row { display: flex; gap: 6px; align-items: center; }
 .vault-side { flex: 1; min-width: 0; text-align: center; }
-.vault-rel { width: 54px; flex: 0 0 auto; text-align: center; }
+
+/* the relation between the two sides — the player's symbol, in the same
+   control as the filters so the panel speaks one language */
+.vault-rel { flex: 0 0 auto; width: 56px; }
+.vault-rel .vault-pick {
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 6px;
+  border-color: transparent;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.vault-rel .vault-pick:hover { border-color: var(--line); }
+.vault-rel .vault-pick-label { text-align: center; }
+.vault-rel .vault-menu { inset-inline: 0 auto; min-width: 92px; }
+.vault-rel .vault-opt-t { font-family: var(--mono); font-size: 13px; }
 
 /* the player's confidence, never the game's */
 .vault-conf { display: flex; gap: 4px; }
@@ -333,6 +522,10 @@ textarea.vault-input { resize: vertical; min-height: 56px; line-height: 1.5; }
 }
 
 /* -------------------------------------------------------------- capture -- */
+/* Armed capture has to be unmistakable and it has to be leavable. The bar is
+   the whole mode: it says what it wants, it names the key that cancels, it
+   carries the button that cancels, and the hairline underneath runs down so
+   the player can see the mode expiring rather than wonder if it is stuck. */
 .vault-capture-bar {
   position: fixed;
   inset-block-start: 14px;
@@ -343,18 +536,79 @@ textarea.vault-input { resize: vertical; min-height: 56px; line-height: 1.5; }
   max-width: calc(100vw - 28px);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px 8px 15px;
+  gap: 10px;
+  padding: 7px 8px 7px 13px;
   border: 1px solid var(--accent);
   border-radius: 99px;
   background: var(--panel);
   box-shadow: 0 10px 34px rgba(0, 0, 0, .16);
   font-size: 12px;
   color: var(--ink);
+  animation: vaultBarIn .22s var(--ease-out) both;
+}
+[dir="rtl"] .vault-capture-bar { padding: 7px 13px 7px 8px; }
+@keyframes vaultBarIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.vault-capture-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: vaultPulse 1.5s var(--ease) infinite;
+}
+@keyframes vaultPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .35; transform: scale(.7); }
+}
+
+.vault-capture-msg { white-space: nowrap; transition: color .18s var(--ease); }
+.vault-capture-bar.is-refused { border-color: var(--warn); }
+.vault-capture-bar.is-refused .vault-capture-msg { color: var(--warn); }
+.vault-capture-bar.is-refused .vault-capture-dot { background: var(--warn); }
+
+.vault-capture-esc {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.vault-capture-cancel { flex: 0 0 auto; }
+
+/* the mode running out, drawn once so it cannot be a surprise */
+.vault-capture-bar::after {
+  content: '';
+  position: absolute;
+  inset-inline: 14px;
+  inset-block-end: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: .45;
+  transform-origin: left center;
+  animation: vaultCaptureClock 30s linear both;
+}
+[dir="rtl"] .vault-capture-bar::after { transform-origin: right center; }
+@keyframes vaultCaptureClock {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
 }
 
 html.vault-capturing,
 html.vault-capturing * { cursor: crosshair !important; }
+/* …except the way out, which is a button and must read as one */
+html.vault-capturing .vault-capture-bar,
+html.vault-capturing .vault-capture-bar * { cursor: default !important; }
+html.vault-capturing .vault-capture-cancel { cursor: pointer !important; }
 
 .vault-target {
   outline: 2px solid var(--accent) !important;
@@ -403,5 +657,12 @@ html.vault-capturing * { cursor: crosshair !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vault { animation: none; }
+  .vault,
+  .vault-menu,
+  .vault-capture-bar { animation: none; }
+  .vault.is-peek { transition: none; }
+  /* the pulse and the running-out line are the only motion that carries
+     meaning here, so they become a static mark rather than nothing */
+  .vault-capture-dot { animation: none; }
+  .vault-capture-bar::after { animation: none; opacity: 0; }
 }

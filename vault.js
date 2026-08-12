@@ -44,6 +44,7 @@ const cut = (s, n) => String(s == null ? '' : s).slice(0, n || 200);
 
 const KINDS = ['note', 'pin', 'rule'];
 const CONFIDENCE = ['question', 'likely', 'certain'];
+const RELS = ['=', '≈', '→', '≠', '?'];
 
 /* One table, read by BOTH the live editor and the loader. They used to carry
    separate numbers, so a rule side longer than 80 characters was accepted by
@@ -144,6 +145,7 @@ const STR = {
     notes: 'Notes', pins: 'Pins', rules: 'Rules', links: 'Links',
     newNote: 'New note', capture: 'Capture', newRule: 'New rule',
     search: 'Search…', allStages: 'All stages', allTags: 'All tags',
+    byStage: 'Filter by stage', byTag: 'Filter by tag', relation: 'Relation',
     title: 'Title', body: 'Write anything…', tags: 'tags, comma separated',
     left: 'left', right: 'right', ruleNote: 'note (optional)',
     question: 'question', likely: 'likely', certain: 'certain',
@@ -154,6 +156,7 @@ const STR = {
     emptyLinks: 'No connections yet. Use Link on any card.',
     captureOn: 'Pick something on screen to keep',
     captureNone: 'That cannot be kept',
+    captureAria: 'Capture text from the screen',
     saveThought: 'Save a thought',
     clear: 'Empty the vault', sure: 'Erase everything?',
     kept: 'kept', from: 'from',
@@ -166,6 +169,7 @@ const STR = {
     notes: 'ملاحظات', pins: 'مقتطفات', rules: 'قواعد', links: 'روابط',
     newNote: 'ملاحظة جديدة', capture: 'التقاط', newRule: 'قاعدة جديدة',
     search: 'بحث…', allStages: 'كل المراحل', allTags: 'كل الوسوم',
+    byStage: 'تصفية حسب المرحلة', byTag: 'تصفية حسب الوسم', relation: 'العلاقة',
     title: 'العنوان', body: 'اكتب ما تشاء…', tags: 'وسوم مفصولة بفواصل',
     left: 'الطرف الأول', right: 'الطرف الثاني', ruleNote: 'ملاحظة (اختياري)',
     question: 'سؤال', likely: 'مرجّح', certain: 'مؤكّد',
@@ -176,6 +180,7 @@ const STR = {
     emptyLinks: 'لا روابط بعد. استخدم «اربط» على أي بطاقة.',
     captureOn: 'اختر شيئًا على الشاشة للاحتفاظ به',
     captureNone: 'لا يمكن الاحتفاظ بهذا',
+    captureAria: 'التقاط نص من الشاشة',
     saveThought: 'احفظ فكرة',
     clear: 'إفراغ الخزانة', sure: 'محو كل شيء؟',
     kept: 'محفوظ', from: 'من',
@@ -350,12 +355,214 @@ const el = (tag, cls, parent, text) => {
   return n;
 };
 
-let root = null, body = null, tabsEl = null, icon = null;
+let root = null, body = null, tabsEl = null, icon = null, captureBtn = null;
 let tab = 'note';
 let query = '', stageFilter = '', tagFilter = '';
 let linkFrom = null;
 
 const TABS = [['note', 'notes'], ['pin', 'pins'], ['rule', 'rules'], ['link', 'links']];
+
+/* ============================================================ dropdowns == */
+/* The filters used to be bare <select>s. A native select arrives wearing the
+   operating system's chrome — its own gradient, its own spinner, its own
+   font — and belongs to no part of this interface. This is the same control
+   drawn in the Vault's own language.
+
+   The <select> stays underneath as the MODEL: it holds the value, it fires
+   `change`, and anything that sets `.value` from outside still moves the
+   control. The button and the listbox are only a view of it. Keeping a real
+   form field means the value has one home rather than two. */
+
+let pickSeq = 0;
+const openMenus = [];
+
+function closeMenus(inside) {
+  openMenus.slice().forEach(d => {
+    if (inside && !(d.wrap.closest && d.wrap.closest(inside))) return;
+    d.close(false);
+  });
+}
+
+function dropdown(parent, opts) {
+  opts = opts || {};
+  const wrap = el('div', 'vault-pick-wrap' + (opts.wrapClass ? ' ' + opts.wrapClass : ''), parent);
+
+  const sel = el('select', 'vault-native' + (opts.selClass ? ' ' + opts.selClass : ''), wrap);
+  sel.setAttribute('tabindex', '-1');
+  sel.setAttribute('aria-hidden', 'true');
+
+  const btn = el('button', 'vault-pick', wrap);
+  btn.type = 'button';
+  btn.id = 'vaultPick' + (++pickSeq);
+  const lab = el('span', 'vault-pick-label', btn, '');
+  el('span', 'vault-pick-caret', btn);
+
+  const menu = el('div', 'vault-menu', wrap);
+  menu.id = btn.id + '-menu';
+  menu.hidden = true;
+  menu.setAttribute('role', 'listbox');
+
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-controls', menu.id);
+  if (opts.label) {
+    btn.setAttribute('aria-label', opts.label);
+    btn.title = opts.label;
+    menu.setAttribute('aria-label', opts.label);
+  }
+
+  let entries = [], sig = null, active = 0, shown = false;
+  const optEls = [];
+
+  const idxOf = v => { for (let i = 0; i < entries.length; i++) if (entries[i].value === v) return i; return -1; };
+
+  function paintActive() {
+    optEls.forEach((o, i) => o.classList.toggle('is-active', i === active));
+    const a = optEls[active];
+    if (a) {
+      btn.setAttribute('aria-activedescendant', a.id);
+      if (a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
+    } else btn.removeAttribute('aria-activedescendant');
+  }
+
+  function paintValue() {
+    const i = idxOf(sel.value);
+    const e = entries[i] || entries[0] || null;
+    lab.textContent = e ? e.label : '';
+    wrap.classList.toggle('is-set', !!(e && e.value));
+    optEls.forEach((o, k) => {
+      o.setAttribute('aria-selected', k === i ? 'true' : 'false');
+      o.classList.toggle('is-on', k === i);
+    });
+  }
+
+  /* Rebuilt only when the list actually changed: `render()` runs on every
+     keystroke in the search field, and tearing the menu down under an open
+     dropdown would make it flicker shut while the player is reading it. */
+  function set(list) {
+    const next = list.map(e => e.value + ' ' + e.label).join('');
+    if (next === sig) { paintValue(); return; }
+    sig = next;
+    const was = sel.value;
+    entries = list.slice();
+    sel.textContent = '';
+    menu.textContent = '';
+    optEls.length = 0;
+    entries.forEach((e, i) => {
+      const o = el('option', null, sel, e.label);
+      o.value = e.value;
+      /* the option's VALUE never reaches the visible DOM — a Break stage's
+         route id is a filter key, never a label */
+      const d = el('div', 'vault-opt', menu);
+      d.id = menu.id + '-o' + i;
+      d.setAttribute('role', 'option');
+      d.setAttribute('aria-selected', 'false');
+      el('span', 'vault-opt-t', d, e.label);
+      d.addEventListener('click', () => choose(i));
+      d.addEventListener('pointerover', () => { active = i; paintActive(); });
+      optEls.push(d);
+    });
+    sel.value = idxOf(was) >= 0 ? was : (entries[0] ? entries[0].value : '');
+    active = Math.max(0, idxOf(sel.value));
+    paintValue();
+    if (shown) paintActive();
+  }
+
+  function choose(i) {
+    const e = entries[i];
+    if (e) { sel.value = e.value; paintValue(); }
+    close(true);
+    if (e && opts.onChange) opts.onChange(sel.value);
+  }
+
+  function away(e) {
+    const t = e.target;
+    if (t && t.closest && t.closest('.vault-pick-wrap') === wrap) return;
+    close(false);
+  }
+
+  function show(from) {
+    if (shown || !entries.length) return;
+    closeMenus();
+    shown = true;
+    menu.hidden = false;
+    wrap.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+    active = from != null && from >= 0 ? from : Math.max(0, idxOf(sel.value));
+    /* a card near the foot of a scrolling list opens upward instead */
+    if (btn.getBoundingClientRect && typeof window !== 'undefined' && window.innerHeight) {
+      const b = btn.getBoundingClientRect();
+      const need = Math.min(entries.length * 30 + 12, 240);
+      wrap.classList.toggle('is-up', window.innerHeight - b.bottom < need && b.top > need);
+    }
+    paintActive();
+    document.addEventListener('pointerdown', away, true);
+    openMenus.push(api);
+  }
+
+  function close(back) {
+    const i = openMenus.indexOf(api);
+    if (i >= 0) openMenus.splice(i, 1);
+    if (!shown) return;
+    shown = false;
+    menu.hidden = true;
+    wrap.classList.remove('is-open');
+    wrap.classList.remove('is-up');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.removeAttribute('aria-activedescendant');
+    document.removeEventListener('pointerdown', away, true);
+    if (back && btn.focus) btn.focus();
+  }
+
+  function step(d) {
+    if (!entries.length) return;
+    active = (active + d + entries.length) % entries.length;
+    paintActive();
+  }
+
+  /* pointerdown, not click: it is the toggle, and a click handler as well
+     would fight the Enter key, which synthesises one */
+  btn.addEventListener('pointerdown', e => {
+    if (e.button != null && e.button !== 0) return;
+    if (shown) close(false); else show();
+  });
+
+  btn.addEventListener('keydown', e => {
+    const k = e.key;
+    const stop = () => { if (e.preventDefault) e.preventDefault(); };
+    if (!shown) {
+      if (k === 'Enter' || k === ' ' || k === 'Spacebar' || k === 'ArrowDown' || k === 'ArrowUp') {
+        stop();
+        show(k === 'ArrowUp' ? entries.length - 1 : null);
+      }
+      return;
+    }
+    if (k === 'ArrowDown') { stop(); step(1); }
+    else if (k === 'ArrowUp') { stop(); step(-1); }
+    else if (k === 'Home') { stop(); active = 0; paintActive(); }
+    else if (k === 'End') { stop(); active = entries.length - 1; paintActive(); }
+    else if (k === 'Enter' || k === ' ' || k === 'Spacebar') { stop(); choose(active); }
+    else if (k === 'Escape' || k === 'Esc') {
+      stop();
+      if (e.stopPropagation) e.stopPropagation();
+      close(true);
+    } else if (k === 'Tab') close(false);
+  });
+
+  /* the model moving — from a test, or from anything that sets .value */
+  sel.addEventListener('change', () => {
+    paintValue();
+    if (opts.onChange) opts.onChange(sel.value);
+  });
+
+  const api = {
+    wrap: wrap, sel: sel, btn: btn, menu: menu,
+    set: set, close: close,
+    value() { return sel.value; },
+    setValue(v) { if (idxOf(v) >= 0) { sel.value = v; paintValue(); } }
+  };
+  return api;
+}
 
 function build() {
   if (root) return;
@@ -401,24 +608,35 @@ function build() {
   search.addEventListener('input', () => { query = search.value.toLowerCase(); render(); });
 
   const filters = el('div', 'vault-filters', tools);
-  const stageSel = el('select', 'vault-input vault-sel', filters);
-  stageSel.addEventListener('change', () => { stageFilter = stageSel.value; render(); });
-  const tagSel = el('select', 'vault-input vault-sel', filters);
-  tagSel.addEventListener('change', () => { tagFilter = tagSel.value; render(); });
-  root.__stageSel = stageSel;
-  root.__tagSel = tagSel;
+  root.__stageDD = dropdown(filters, {
+    selClass: 'vault-sel', label: T('byStage'),
+    onChange: v => { stageFilter = v; render(); }
+  });
+  root.__tagDD = dropdown(filters, {
+    selClass: 'vault-sel', label: T('byTag'),
+    onChange: v => { tagFilter = v; render(); }
+  });
 
+  /* The three siblings read as one row: the leading + is drawn by the
+     stylesheet so all three carry exactly the same mark, and the label alone
+     stays the button's text. */
   const acts = el('div', 'vault-acts', tools);
-  const bNote = el('button', 'vault-btn', acts, '+ ' + T('newNote'));
+  const bNote = el('button', 'vault-btn vault-add', acts, T('newNote'));
   bNote.type = 'button';
+  bNote.setAttribute('aria-label', T('newNote'));
   bNote.addEventListener('click', () => { tab = 'note'; syncTabs(); newItem('note'); });
 
-  const bPin = el('button', 'vault-btn', acts, T('capture'));
+  const bPin = el('button', 'vault-btn vault-add', acts, T('capture'));
   bPin.type = 'button';
+  bPin.setAttribute('aria-label', T('captureAria'));
+  bPin.title = T('captureAria');
+  bPin.setAttribute('aria-pressed', 'false');
   bPin.addEventListener('click', () => startCapture());
+  captureBtn = bPin;
 
-  const bRule = el('button', 'vault-btn', acts, '+ ' + T('newRule'));
+  const bRule = el('button', 'vault-btn vault-add', acts, T('newRule'));
   bRule.type = 'button';
+  bRule.setAttribute('aria-label', T('newRule'));
   bRule.addEventListener('click', () => { tab = 'rule'; syncTabs(); newItem('rule'); });
 
   body = el('div', 'vault-body', root);
@@ -506,12 +724,15 @@ function open(on) {
   if (on) {
     pause();
     root.hidden = false;
-    root.__scrim.classList.add('is-on');
+    /* the scrim covers the whole window, so it must never come back while
+       capture is armed — that is what made every pick land on nothing */
+    if (!capturing) root.__scrim.classList.add('is-on');
     document.documentElement.classList.add('vault-open');
     if (!data.seen) { data.seen = true; save(); }
     render();
   } else {
     stopCapture(true);
+    closeMenus();
     linkFrom = null;
     root.hidden = true;
     root.__scrim.classList.remove('is-on');
@@ -545,28 +766,20 @@ function refreshFilters() {
   const tags = [];
   data.items.forEach(i => i.tags.forEach(t => { if (tags.indexOf(t) < 0) tags.push(t); }));
 
-  const fill = (sel, list, allLabel, keyer, labeler) => {
-    const was = sel.value;
-    sel.textContent = '';
-    const o0 = el('option', null, sel, allLabel);
-    o0.value = '';
-    list.forEach(v => {
-      const o = el('option', null, sel, labeler(v));
-      o.value = keyer(v);
-    });
-    sel.value = list.some(v => keyer(v) === was) ? was : '';
-  };
-
   /* stages are listed by NAME. Break stages carry internal ids that must
      never be shown, so the value is the key and the label never is. */
-  fill(root.__stageSel, stages, T('allStages'), s => s.key, s => s.name || '—');
-  fill(root.__tagSel, tags, T('allTags'), t => t, t => t);
-  stageFilter = root.__stageSel.value;
-  tagFilter = root.__tagSel.value;
+  root.__stageDD.set([{ value: '', label: T('allStages') }]
+    .concat(stages.map(s => ({ value: s.key, label: s.name || '—' }))));
+  root.__tagDD.set([{ value: '', label: T('allTags') }]
+    .concat(tags.map(t => ({ value: t, label: t }))));
+  stageFilter = root.__stageDD.value();
+  tagFilter = root.__tagDD.value();
 }
 
 function render() {
   if (!root || root.hidden) return;
+  /* a dropdown living on a card is about to be destroyed under itself */
+  closeMenus('.vault-body');
   refreshFilters();
   body.textContent = '';
 
@@ -642,13 +855,12 @@ function card(it) {
     left.placeholder = T('left');
     left.addEventListener('input', () => Vault.update(it.id, { left: left.value }));
 
-    const rel = el('select', 'vault-input vault-rel', row);
-    ['=', '≈', '→', '≠', '?'].forEach(r => {
-      const o = el('option', null, rel, r);
-      o.value = r;
+    const rel = dropdown(row, {
+      wrapClass: 'vault-rel', label: T('relation'),
+      onChange: v => Vault.update(it.id, { rel: v })
     });
-    rel.value = ['=', '≈', '→', '≠', '?'].indexOf(it.rel) >= 0 ? it.rel : '=';
-    rel.addEventListener('change', () => Vault.update(it.id, { rel: rel.value }));
+    rel.set(RELS.map(r => ({ value: r, label: r })));
+    rel.setValue(RELS.indexOf(it.rel) >= 0 ? it.rel : '=');
 
     const right = el('input', 'vault-input vault-side', row);
     right.value = it.right;
@@ -744,34 +956,73 @@ const CAPTURE_SEL = [
 
 const NEVER = '.vault, .vault-scrim, #dev, .lab, .rs-live, .vault-capture-bar';
 
-let capturing = false, hoverEl = null;
+/* Capture mode is a mode, and a mode the player cannot see or leave is a trap.
+   Three separate things used to build that trap:
+
+     1. the click-away SCRIM stayed up. It covers the whole window at
+        z-index 8500, so every pointer event landed on `.vault-scrim` — which
+        is on the NEVER list — and nothing was ever hoverable or pickable.
+        Pressing Capture genuinely did nothing.
+     2. `onPick` ran on document in the CAPTURE phase and called
+        stopPropagation() before deciding anything, so the click never reached
+        the bar's own Cancel button. The one visible exit was dead.
+     3. `.vault.is-peek { opacity }` was overridden by the panel's entrance
+        animation, which is declared `both` — a finished animation's fill still
+        wins over a normal declaration. The panel never stepped aside either.
+
+   What is left after that is Escape, which nothing on screen mentions. Hence
+   "doesn't do anything and hang".
+
+   So: no scrim while armed, the Vault's own UI is never swallowed, the button
+   holds a pressed state, focus moves to Cancel, and the mode expires by
+   itself. */
+
+const CAPTURE_MS = 30000;
+const SAY_MS = 1600;
+
+let capturing = false, hoverEl = null, captureTimer = 0, sayTimer = 0;
 
 function startCapture() {
-  if (capturing) return;
+  if (capturing) { stopCapture(); return; }   // pressing it again disarms it
   build();
   capturing = true;
   pause();
+  closeMenus();
 
   /* the panel gets out of the way so the puzzle is visible */
   root.classList.add('is-peek');
   document.documentElement.classList.add('vault-capturing');
+  if (root.__scrim) root.__scrim.classList.remove('is-on');
+  if (captureBtn) {
+    captureBtn.classList.add('is-picking');
+    captureBtn.setAttribute('aria-pressed', 'true');
+  }
 
   const bar = el('div', 'vault-capture-bar');
   bar.id = 'vaultCaptureBar';
-  el('span', null, bar, T('captureOn'));
-  const cancel = el('button', 'vault-btn', bar, T('cancel'));
+  bar.setAttribute('role', 'status');
+  el('span', 'vault-capture-dot', bar);
+  bar.__msg = el('span', 'vault-capture-msg', bar, T('captureOn'));
+  el('kbd', 'vault-capture-esc', bar, 'Esc');
+  const cancel = el('button', 'vault-btn vault-capture-cancel', bar, T('cancel'));
   cancel.type = 'button';
-  cancel.addEventListener('click', () => stopCapture(true));
+  cancel.addEventListener('click', () => stopCapture());
   document.body.appendChild(bar);
+  if (cancel.focus) cancel.focus();
 
   document.addEventListener('pointerover', onHover, true);
   document.addEventListener('click', onPick, true);
   document.addEventListener('keydown', onEsc, true);
+
+  /* and it ends on its own, so a forgotten mode is never a stuck one */
+  captureTimer = setTimeout(() => { captureTimer = 0; stopCapture(); }, CAPTURE_MS);
 }
 
 function stopCapture(silent) {
   if (!capturing) return;
   capturing = false;
+  if (captureTimer) { clearTimeout(captureTimer); captureTimer = 0; }
+  if (sayTimer) { clearTimeout(sayTimer); sayTimer = 0; }
   clearHover();
   document.removeEventListener('pointerover', onHover, true);
   document.removeEventListener('click', onPick, true);
@@ -779,11 +1030,39 @@ function stopCapture(silent) {
   const bar = document.getElementById('vaultCaptureBar');
   if (bar) bar.remove();
   document.documentElement.classList.remove('vault-capturing');
-  if (root) root.classList.remove('is-peek');
+  if (root) {
+    root.classList.remove('is-peek');
+    if (root.__scrim && !root.hidden) root.__scrim.classList.add('is-on');
+  }
+  if (captureBtn) {
+    captureBtn.classList.remove('is-picking');
+    captureBtn.setAttribute('aria-pressed', 'false');
+    /* whatever ended the mode, the keyboard lands back where it started */
+    if (!silent && root && !root.hidden && captureBtn.focus) captureBtn.focus();
+  }
   if (!silent) render();
 }
 
-function onEsc(e) { if (e.key === 'Escape') { e.preventDefault(); stopCapture(true); } }
+/* A click that keeps nothing should say why rather than look broken. */
+function say(text) {
+  const bar = document.getElementById('vaultCaptureBar');
+  if (!bar || !bar.__msg) return;
+  bar.__msg.textContent = text;
+  bar.classList.add('is-refused');
+  if (sayTimer) clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => {
+    sayTimer = 0;
+    const b = document.getElementById('vaultCaptureBar');
+    if (b && b.__msg) { b.__msg.textContent = T('captureOn'); b.classList.remove('is-refused'); }
+  }, SAY_MS);
+}
+
+function onEsc(e) {
+  if (e.key !== 'Escape' && e.key !== 'Esc') return;
+  if (e.preventDefault) e.preventDefault();
+  if (e.stopPropagation) e.stopPropagation();
+  stopCapture();
+}
 
 function clearHover() {
   if (hoverEl) hoverEl.classList.remove('vault-target');
@@ -808,17 +1087,32 @@ function onHover(e) {
 }
 
 function onPick(e) {
-  const hit = candidate(e.target);
-  e.preventDefault();
-  e.stopPropagation();
-  if (!hit) return;
+  const t = e.target;
 
-  const text = (hit.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240);
-  stopCapture(true);
-  tab = 'pin';
-  syncTabs();
-  open(true);
-  newItem('pin', { text: text });
+  /* The Vault's own controls are not picks and are never swallowed. Cancel
+     lives in the bar; eating its click is what left the player stuck. */
+  if (t && t.closest && (t.closest('.vault-capture-bar') || t.closest('.vault'))) return;
+
+  if (e.preventDefault) e.preventDefault();
+  if (e.stopPropagation) e.stopPropagation();
+
+  const hit = candidate(t);
+  if (hit) {
+    const text = (hit.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+    stopCapture(true);
+    tab = 'pin';
+    syncTabs();
+    open(true);
+    newItem('pin', { text: text });
+    return;
+  }
+
+  /* aimed at the puzzle, or at something the Vault refuses to keep: say so
+     and stay armed, so one bad aim does not cost the whole mode */
+  if (t && t.closest && (t.closest(NEVER) || t.closest('#board'))) { say(T('captureNone')); return; }
+
+  /* a click well away from the puzzle is the player leaving */
+  stopCapture();
 }
 
 /* ========================================================= save a thought = */
