@@ -729,13 +729,17 @@ window.addEventListener('unhandledrejection', e => {
     const realErr = w.console.error;
     w.console.error = (...a) => { errs.push(a.join(' ')); realErr.apply(w.console, a); };
     w.addEventListener('error', e => errs.push('throw: ' + e.message));
-    for (let i = 0; i < w.RULESET_LEVELS.length; i++) {
+    /* the whole played route, not RULESET_LEVELS: walking the shorter array
+       stopped at play position 44, so stages 46-75 had never been built in
+       Arabic at all — while the line below claimed "all 15" */
+    const arStages = w.RULESET_ROUTE.build(w.RULESET_LEVELS, w.RULESET_BREAKS);
+    for (let i = 0; i < arStages.length; i++) {
       w.RULESET.load(i); await wait(90);
       /* the finale deliberately gives no instruction */
-      if (w.RULESET_LEVELS[i].id !== 45 && !d.querySelector('#instruction').textContent.trim())
-        errs.push('level ' + (i + 1) + ' rendered an empty instruction');
+      if (arStages[i].id !== 45 && !d.querySelector('#instruction').textContent.trim())
+        errs.push((w.RULESET_ROUTE.keyOf(arStages[i])) + ' rendered an empty instruction');
     }
-    log(errs.length === 0, 'AR all 15 levels build in Arabic' +
+    log(errs.length === 0, 'AR all ' + arStages.length + ' stages build in Arabic' +
         (errs.length ? ' → ' + errs.join(' / ') : ''));
     setSave({ lang: 'en' });
     localStorage.removeItem('ruleset:v1');
