@@ -1,0 +1,456 @@
+/* ==========================================================================
+   RULESET — the invitation gate
+   --------------------------------------------------------------------------
+   Two surfaces, both borrowing the game's tokens so nothing here looks bolted
+   on:
+
+     .ivt-gate    the front door. Full screen, because until someone is
+                  registered there is nothing else to look at.
+     .ivt-panel   the owner's profile drawer, where invitations are made.
+                  A right-hand sheet on desktop, a bottom sheet on a phone,
+                  mirrored under RTL.
+
+   No colour here says "secure". The gate is a courtesy lock and the copy in
+   invite.js says so; the styling should not contradict it with padlocks and
+   green ticks.
+   ========================================================================== */
+
+/* while the gate is up, nothing behind it scrolls */
+html.ivt-locked, html.ivt-locked body { overflow: hidden; }
+
+/* screen-reader / clipboard scratch element — present, never seen */
+.ivt-offscreen {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+
+/* ======================================================== the front door == */
+.ivt-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.ivt-card {
+  width: min(420px, 100%);
+  padding: 34px 30px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 18px);
+  background: var(--panel);
+  text-align: center;
+}
+
+.ivt-card.is-wrong { animation: ivt-shake .32s var(--ease); }
+
+@keyframes ivt-shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-6px); }
+  75%      { transform: translateX(6px); }
+}
+
+.ivt-brand {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .3em;
+  color: var(--muted);
+}
+
+.ivt-title {
+  margin: 16px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--ink);
+}
+
+.ivt-sub {
+  margin: 8px auto 0;
+  max-width: 30ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* ---- the form ------------------------------------------------------------ */
+.ivt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 24px;
+  text-align: start;
+}
+
+.ivt-field { display: block; }
+
+.ivt-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.ivt-input {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14.5px;
+  transition: border-color .18s var(--ease);
+}
+
+.ivt-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* a code is characters, not prose: monospace, spaced, unmistakably literal */
+.ivt-input.ivt-mono {
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.ivt-input.ivt-mono::placeholder { letter-spacing: .12em; }
+
+.ivt-err {
+  margin: -4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--warn);
+}
+
+.ivt-go {
+  margin-top: 4px;
+  padding: 12px 18px;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: opacity .18s var(--ease), transform .12s var(--ease);
+}
+
+.ivt-go:hover { opacity: .88; }
+.ivt-go:active { transform: scale(.985); }
+
+/* the sentence that refuses to oversell what this is */
+.ivt-honest {
+  margin: 22px auto 0;
+  max-width: 34ch;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.ivt-gate-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ivt-chip-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color .18s var(--ease), border-color .18s var(--ease);
+}
+
+.ivt-chip-btn:hover { color: var(--ink); border-color: var(--ink-soft); }
+
+/* ============================================== the owner's profile sheet == */
+.ivt-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  background: rgba(0, 0, 0, .28);
+}
+
+.ivt-panel {
+  position: fixed;
+  z-index: 9600;
+  inset-block: 0;
+  inset-inline-end: 0;                /* mirrors under RTL without a second rule */
+  width: min(390px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-inline-start: 1px solid var(--line);
+  box-shadow: 0 0 44px rgba(0, 0, 0, .16);
+}
+
+.ivt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ivt-head-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ivt-x {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ivt-x:hover { color: var(--ink); }
+
+.ivt-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- sections ------------------------------------------------------------ */
+.ivt-sec { margin-bottom: 26px; }
+
+.ivt-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ivt-sec-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ivt-btn {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease);
+}
+
+.ivt-btn:hover { border-color: var(--ink-soft); }
+
+/* a copied-to-clipboard confirmation, which is a fact and may be green */
+.ivt-btn.is-done { border-color: var(--good); color: var(--good); }
+
+.ivt-fine {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.ivt-empty {
+  padding: 16px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---- who you are --------------------------------------------------------- */
+.ivt-meta {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+
+.ivt-meta-tag {
+  display: inline-block;
+  margin-inline-end: 8px;      /* it sits inline with the date; they must not touch */
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ivt-meta-tag.is-owner { border-color: var(--accent); color: var(--accent); }
+
+.ivt-meta-code {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .1em;
+  color: var(--ink-soft);
+  word-break: break-all;
+}
+
+.ivt-meta-at {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---- issued invitations -------------------------------------------------- */
+.ivt-invites {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ivt-invite {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+
+/* the one just minted, so it is findable in a list of similar things */
+.ivt-invite.is-new { border-color: var(--accent); }
+
+.ivt-invite-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ivt-invite-code {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  color: var(--ink);
+  direction: ltr;
+}
+
+.ivt-invite-at {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ivt-invite-link {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  word-break: break-all;
+  direction: ltr;
+}
+
+.ivt-invite-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---- the bottom-bar chip ------------------------------------------------- */
+.ivt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease);
+}
+
+.ivt-chip:hover { border-color: var(--line); color: var(--ink-soft); }
+
+.ivt-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.ivt-owner .ivt-chip-dot { background: var(--accent); }
+
+.ivt-chip-name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- focus, everywhere --------------------------------------------------- */
+.ivt-go:focus-visible,
+.ivt-btn:focus-visible,
+.ivt-chip:focus-visible,
+.ivt-chip-btn:focus-visible,
+.ivt-x:focus-visible,
+.ivt-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- phones -------------------------------------------------------------- */
+@media (max-width: 560px) {
+  .ivt-card { padding: 28px 20px 24px; }
+
+  /* a right-hand drawer on a phone is a wall; come up from the floor instead */
+  .ivt-panel {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-height: 86vh;
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+    border-radius: var(--r-lg, 18px) var(--r-lg, 18px) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ivt-card.is-wrong { animation: none; }
+  .ivt-go, .ivt-btn, .ivt-chip, .ivt-chip-btn, .ivt-input { transition: none; }
+  .ivt-go:active { transform: none; }
+}

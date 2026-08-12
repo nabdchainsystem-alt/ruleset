@@ -156,7 +156,7 @@ function pad8(n) { const s = n.toString(16); return '00000000'.slice(s.length) +
 /* The owner's key is stored as a fingerprint, not as itself, so reading this
    file does not hand it over. The code is a perfectly ordinary minted code —
    it also passes the checksum — which is why it is checked first. */
-const MASTER = 'beff92c23dd875f5';
+const MASTER = 'caf6344ba9b8ce73';
 
 /** Spacing, dashes and case are the retyper's business, not ours. */
 function normalise(raw) {

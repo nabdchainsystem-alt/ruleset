@@ -1655,6 +1655,9 @@ this.load(first);
        and until it arrives the layer is invisible and takes no clicks. */
     dom.solved.classList.add('is-on');
     dom.solved.classList.remove('is-shown');
+    /* levels 6 and 7 suppress the zoom reminder while they are being solved;
+       now that one is finished, say so rather than waiting for the 1.2s poll */
+    this.paintZoom();
 
     clearTimeout(this.solvedReveal);
     this.solvedReveal = setTimeout(() => {
@@ -1889,9 +1892,18 @@ this.load(first);
 
     const level = LEVELS[this.index];
     const factor = this.zoomFactor();
+    /* The reminder is normally suppressed on levels 6 and 7, because those two
+       are SOLVED by zooming and nagging someone mid-solve would be absurd. But
+       the moment such a level is finished the zoom has outlived its purpose,
+       and leaving the player to discover on the next stage that the whole game
+       is still at 150% is exactly the friction this chip exists to prevent.
+
+       A page cannot reset browser zoom itself — there is no API for it, by
+       design — so the best available thing is to say so at the right moment. */
+    const zoomLevel = this.ZOOM_LEVELS.indexOf(level && level.id) >= 0;
     const show = factor > 1.08 &&
                  !this.zoomDismissed &&
-                 this.ZOOM_LEVELS.indexOf(level && level.id) < 0;
+                 (!zoomLevel || this.solvedNow);
 
     if (!show) { chip.hidden = true; return; }
 
