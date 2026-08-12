@@ -62,61 +62,9 @@ window.RULESET_LEVELS = [
 
     /* Stage one, screen one: nothing here has taught the player that the dot
        is them. Without that, "reach the end" has no subject and the solution
-       reads as arbitrary. So it is simply said — once, quietly, and only on
-       this level. It leaves the moment the player touches anything, because
-       an instruction that stays after it has been understood is clutter.
-
-       Pinned LTR: the arrow points at the dot, and the dot sits on the left
-       in both languages because the level places it by coordinate. */
-    const hello = ctx.el('div', 'l1-hello', {
-      x: 60 + 22 + 12, y: Math.round(h / 2 - 8)
-    });
-    hello.dir = 'ltr';
-    ctx.el('span', 'l1-arrow', { parent: hello });
-    ctx.el('span', 'l1-label', {
-      parent: hello,
-      text: ctx.t({ en: 'this is you', ar: 'هذا أنت' })
-    });
-    ctx.after(400, () => hello.classList.add('is-on'));
-
-    /* It steps aside while something is being carried — a label sitting on top
-       of the thing you are moving is in the way — and comes back when you let
-       go, because until this is solved the fact is still worth knowing. */
-    let met = false;
-    const dismiss = () => hello.classList.remove('is-on');
-    const restore = () => { if (!met) hello.classList.add('is-on'); };
-    /* capture phase on the window: the drag handler stops the event before it
-       reaches the board, so a bubbling listener there never hears it */
-    ctx.on(window, 'pointerdown', dismiss, true);
-    ctx.on(window, 'pointerup', () => ctx.after(260, restore));
-
-    const door = ctx.el('div', 'obj door', { x: w - 90, y: Math.round(h / 2 - 37) });
-    const pos = { x: w - 90, y: h / 2 - 37 };
-
-    // The door retreats to whichever corner is furthest from the dot.
-    ctx.frame(dt => {
-      const s = ctx.size();
-      const dx = (parseFloat(dot.style.left) || 0) + 11;
-      const dy = (parseFloat(dot.style.top) || 0) + 11;
-
-      const corners = [
-        [18, 18], [s.w - 52, 18],
-        [18, s.h - 92], [s.w - 52, s.h - 92]
-      ];
-      let best = corners[0], bestD = -1;
-      for (const c of corners) {
-        const d = Math.hypot(c[0] + 17 - dx, c[1] + 37 - dy);
-        if (d > bestD) { bestD = d; best = c; }
-      }
-
-      const close = Math.hypot(pos.x + 17 - dx, pos.y + 37 - dy) < 280;
-      if (close) {
-        const k = Math.min(1, dt * 3.2);
-        pos.x += (best[0] - pos.x) * k;
-        pos.y += (best[1] - pos.y) * k;
-        ctx.place(door, Math.round(pos.x), Math.round(pos.y));
-      }
-    });
+       reads as arbitrary rather than clever. So it is simply said — once,
+       quietly, and only on this level. */
+    const you = ctx.note(dot, { en: 'this is you', ar: 'هذا أنت' });
 
     // The actual solution: bring "end" to the dot.
     const END = { en: 'end', ar: 'النهاية' };
@@ -124,7 +72,7 @@ window.RULESET_LEVELS = [
     ctx.check(() => {
       const end = ctx.word(END);
       const hit = !!end && ctx.hits(end, dot, 4);
-      if (hit) { met = true; hello.classList.remove('is-on'); }
+      if (hit && you) you.done();
       return hit;
     });
   }

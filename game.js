@@ -1033,6 +1033,66 @@ class LevelContext {
     return list;
   }
 
+  /**
+   * A quiet annotation pointing at something on the stage.
+   *   ctx.note(el, { en: 'this is you', ar: 'هذا أنت' })
+   *
+   * WHAT THIS IS FOR, and the line must not be crossed: facts the player is
+   * GIVEN, never things they are meant to find. "This is you" names a subject
+   * the screen cannot show. "Drag this word" would hand over the puzzle. If a
+   * note would shorten the thinking rather than make it possible, it does not
+   * belong on that stage — most stages need none.
+   *
+   * It gets out of the way while something is being carried, returns to the
+   * target's new position when the pointer is released, and leaves for good
+   * once the stage is solved.
+   */
+  note(target, text, opts) {
+    opts = opts || {};
+    if (!target) return null;
+
+    const wrap = this.el('div', 'note');
+    wrap.dir = 'ltr';                 // the arrow points, it does not read
+    const arrow = this.el('span', 'note-arrow', { parent: wrap });
+    this.el('span', 'note-label', { parent: wrap, text: this.t(text) });
+
+    const place = () => {
+      const gap = 12;
+      const stage = rectOf(dom.stage);
+      const r = rectOf(target);
+      /* measured after the label exists, so the flip knows the real width */
+      const w = wrap.offsetWidth || 120;
+      const right = r.right - stage.left + gap;
+      const flip = opts.side === 'left' || (right + w > stage.width - 6);
+      wrap.classList.toggle('is-left', flip);
+      const x = flip ? (r.left - stage.left - gap - w) : right;
+      const y = r.top - stage.top + r.height / 2 - 8;
+      wrap.style.left = Math.round(x) + 'px';
+      wrap.style.top = Math.round(y) + 'px';
+    };
+    place();
+
+    let gone = false;
+
+    /* Follow the target. A label that points at where the object USED to be is
+       worse than no label: it points at nothing and says something false. */
+    this.frame(() => { if (!gone) place(); });
+    const hide = () => wrap.classList.remove('is-on');
+    const show = () => { if (!gone) { place(); wrap.classList.add('is-on'); } };
+
+    this.after(opts.delay == null ? 400 : opts.delay, show);
+    /* capture: a drag handler stops the event before it reaches the board */
+    this.on(window, 'pointerdown', hide, true);
+    this.on(window, 'pointerup', () => this.after(260, show));
+
+    return {
+      el: wrap,
+      move: place,
+      /** the fact has been used up — take it away and do not bring it back */
+      done() { gone = true; hide(); }
+    };
+  }
+
   /** Let this level's objects leave the stage without being clipped. */
   openStage() {
     dom.stage.classList.add('is-open');

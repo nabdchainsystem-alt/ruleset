@@ -1631,12 +1631,12 @@ button { font: inherit; color: inherit; }
 .lab-input:focus-visible,
 .instruction .w.is-editable:focus-visible { outline-offset: 2px; }
 
-/* ------------------------------------------------------- level 1 only ----
-   The one place in the game that explains itself. It says the single thing
-   the first screen cannot show — that the dot is the player — and then gets
-   out of the way. Muted, monospaced and small, so it reads as an annotation
-   on the game rather than as part of it. */
-.l1-hello {
+/* ------------------------------------------------------------- notes ----
+   ctx.note(): a quiet annotation pointing at something on the stage. Only for
+   facts the player is GIVEN — a subject the screen cannot show — never for
+   something they are meant to find. Muted, monospaced and small, so it reads
+   as an annotation ON the game rather than as part of it. */
+.note {
   position: absolute;
   display: flex;
   align-items: center;
@@ -1647,9 +1647,9 @@ button { font: inherit; color: inherit; }
   transition: opacity .55s var(--ease);
 }
 
-.l1-hello.is-on { opacity: 1; }
+.note.is-on { opacity: 1; }
 
-.l1-arrow {
+.note-arrow {
   position: relative;
   width: 30px;
   height: 1px;
@@ -1657,7 +1657,7 @@ button { font: inherit; color: inherit; }
 }
 
 /* the head, on the dot's side */
-.l1-arrow::after {
+.note-arrow::after {
   content: '';
   position: absolute;
   left: -1px;
@@ -1666,7 +1666,17 @@ button { font: inherit; color: inherit; }
   border-right-color: var(--muted);
 }
 
-.l1-label {
+/* when there is no room on the right, the note sits left and the head swaps
+   sides so it still points AT the thing */
+.note.is-left { flex-direction: row-reverse; }
+.note.is-left .note-arrow::after {
+  left: auto;
+  right: -1px;
+  border-right-color: transparent;
+  border-left-color: var(--muted);
+}
+
+.note-label {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: .16em;
@@ -1676,7 +1686,7 @@ button { font: inherit; color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .l1-hello { transition: none; }
+  .note { transition: none; }
 }
 
 /* ---------------------------------------------------------------- solved --
@@ -1760,7 +1770,7 @@ kbd {
 /* everything below can carry Arabic */
 [dir="rtl"] .status,
 [dir="rtl"] .hintline,
-[dir="rtl"] .l1-label,
+[dir="rtl"] .note-label,
 [dir="rtl"] .level-name,
 [dir="rtl"] .void-label,
 [dir="rtl"] .void-chip,
@@ -1777,7 +1787,7 @@ kbd {
 [dir="rtl"] .btn,
 [dir="rtl"] .keymap .cap,
 [dir="rtl"] .readout,
-[dir="rtl"] .l1-label,
+[dir="rtl"] .note-label,
 [dir="rtl"] .para {
   letter-spacing: normal;
 }
