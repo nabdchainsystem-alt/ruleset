@@ -2249,6 +2249,46 @@ window.addEventListener('unhandledrejection', e => {
         ' stages set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
   }
 
+  /* ------------------------------------------------ the finale's data --
+     Level 45 reads Echo Memory back: it sorts the marks by the level that
+     produced them, normalises each by that level's own phase, and the result
+     must be the sentence. This walks the same path through the real save
+     system rather than through echo.js alone, and it seeds the marks OUT OF
+     ORDER, because storage order is not play order and the wall must not
+     depend on it. */
+  {
+    const w = await loadLevel(1);
+    const E = w.RULESET_ECHO, S = w.RULESET_STATE;
+    const marked = w.RULESET_LEVELS.filter(l => l.echoMarkChar);
+    log(marked.length === 29, 'twenty-nine levels carry a mark');
+
+    S.resetEcho ? S.resetEcho() : (S.data.echoMemory.length = 0);
+    /* deliberately shuffled going in */
+    marked.slice().sort((a, b) => ((a.id * 7919) % 101) - ((b.id * 7919) % 101))
+      .forEach(l => S.remember(l.id, E.encodeEchoMark(l.echoMarkChar, l.id), E.levelPhase(l.id)));
+
+    const held = S.marks().filter(m => m.levelId >= 16 && m.levelId <= 44);
+    log(held.length === 29, 'Echo Memory holds twenty-nine marks and no more');
+    log(held.every((m, i) => i === 0 || m.levelId > held[i - 1].levelId),
+        'Echo Memory comes back in level order however it went in');
+
+    const read = held.map(m => {
+      const p = E.levelPhase(m.levelId);
+      const n = m.tokens.map(t => E.normalizeToken(t, p));
+      return E.tokensToCharacter(n[0], n[1]);
+    }).join('');
+    log(read === 'YOU BUILT THE KEY. USE IT NOW',
+        'the wall reads: ' + JSON.stringify(read));
+
+    /* the lock at the end of level 45 compares against the language itself */
+    log(E.TOKENS.join(' ') === 'VE NA OR SE KA MI RU LI',
+        'the final key is VE NA OR SE KA MI RU LI');
+
+    /* and the season must not be readable before it is lived */
+    S.data.echoMemory.length = 0;
+    log(S.marks().length === 0, 'wiping Echo Memory leaves nothing to read');
+  }
+
   /* --------------------------------------------- engine: lost objects --
      An object dragged clean out of the window cannot be grabbed again, and
      Restart is the only way back. No puzzle asks for that. */
