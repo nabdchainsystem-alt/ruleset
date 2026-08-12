@@ -26,6 +26,9 @@ package.json
 pnpm-lock.yaml
 node_modules/
 
+# design source for logo.svg — 656K of reference that the site never loads
+logo-source.png
+
 .git/
 .gitignore
 .impeccable/
