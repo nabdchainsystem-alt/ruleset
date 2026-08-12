@@ -18,7 +18,7 @@ strand players on whatever build they first loaded. See *Caching* below.
 | | |
 |---|---|
 | Framework preset | **Other** (none — do not pick Vite/Next) |
-| Build command | **none** (leave empty) |
+| Build command | **`./build.sh`** — writes the Build Output API directly |
 | Install command | **none** |
 | Output directory | **`.`** (the repository root — set explicitly in `vercel.json`) |
 | Package manager | not used at deploy time |
@@ -100,6 +100,24 @@ because the path is unchanged. A catch-all would also break the `404`s that
 keep the answer key off the public build — the opposite of what this project
 needs. `browser-tests.mjs` serves the real file set through the real rewrite
 table and asserts both routes plus all nine 404s.
+
+### `vercel.json` cannot contain comments — this cost five deploys
+
+JSON has no comment syntax, and Vercel **rejects any property it does not
+recognise**, refusing the whole deployment:
+
+```
+Error: Invalid vercel.json - should NOT have additional property `//`.
+```
+
+A `"//"` key was used to explain the config. Every deploy failed on it, and the
+failure was visible **only in the CLI output** — the site simply kept serving
+an older broken build, and `curl` showed `404 — not in /var/task` on every
+path, which looks exactly like a build-output problem and is not one.
+
+Explanations belong in this file or in `build.sh`, never in `vercel.json`.
+`browser-tests.mjs` now validates the file's keys before it does anything else
+and exits non-zero on an unknown one.
 
 ### If the deploy 404s with `404 — not in /var/task`
 

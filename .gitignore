@@ -11,3 +11,5 @@ _z.html
 _l16*.html
 _skip.html
 .vercel/
+.vercel
+.env*

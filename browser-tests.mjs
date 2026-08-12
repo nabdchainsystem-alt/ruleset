@@ -24,6 +24,27 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = 8749;
+/* --------------------------------------------------------------------------
+   vercel.json must be VALID before anything else matters. Vercel rejects any
+   property it does not know and refuses the whole deployment — a `"//"` key
+   used as a comment failed five deploys in a row with an error visible only in
+   the CLI output, while the site kept serving an older broken build.
+   JSON has no comments. This is the check that remembers that.
+   -------------------------------------------------------------------------- */
+{
+  const ALLOWED = new Set(['$schema', 'buildCommand', 'installCommand', 'devCommand',
+    'ignoreCommand', 'framework', 'outputDirectory', 'public', 'regions', 'redirects',
+    'rewrites', 'headers', 'cleanUrls', 'trailingSlash', 'functions', 'crons', 'images',
+    'rootDirectory', 'git']);
+  const vj = JSON.parse(await readFile(join(ROOT, 'vercel.json'), 'utf8'));
+  const bad = Object.keys(vj).filter(k => !ALLOWED.has(k));
+  if (bad.length) {
+    console.log(`\n  vercel.json has ${bad.length} property Vercel will reject: ${bad.join(', ')}`);
+    console.log('  Vercel refuses the entire deployment on an unknown key.\n');
+    process.exit(1);
+  }
+}
+
 /* Serve the REAL deployable output, built the way Vercel builds it, rather
    than the repository with exclusions applied by hand. If build.sh and the
    deploy ever disagree, this is where it shows up. */

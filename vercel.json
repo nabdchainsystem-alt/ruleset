@@ -1,9 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": "RULESET has no framework and no bundler. Vercel's zero-config detection failed twice here with '404 - not in /var/task' (the serverless runtime answering for a project with no functions, because the build emitted no static output), so the deployable site is written explicitly by build.sh using the Build Output API. Routes, headers and the CSP live in .vercel/output/config.json, which build.sh generates - not here, because with the Build Output API that file is the authority.",
-
   "buildCommand": "./build.sh",
-  "installCommand": "echo 'no dependencies'",
+  "installCommand": "echo no dependencies",
   "framework": null
 }
