@@ -136,6 +136,27 @@ const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 /* Pointer capture is an optimisation, not a requirement: it can throw for
    synthetic or already-released pointers, and every drag also listens on
    window, so failure here is harmless. */
+/* Type properties that must travel with an element when it leaves the flow.
+   A word lifted out of .instruction lands in .loose, where it would otherwise
+   inherit body type and collapse from ~33px to ~15px — the box stays the size
+   detach() pinned, the glyphs shrink inside it, and the word appears to shrink
+   away from the pointer. Copying the computed values keeps a lifted thing
+   looking exactly like the thing that was picked up, whatever styled it. */
+const CARRIED_TYPE = [
+  'font-family', 'font-size', 'font-weight', 'font-style',
+  'letter-spacing', 'line-height', 'text-transform', 'font-variant',
+  'color', 'text-align', 'white-space'
+];
+
+function carryType(el) {
+  const cs = getComputedStyle(el);
+  CARRIED_TYPE.forEach(p => el.style.setProperty(p, cs.getPropertyValue(p)));
+}
+
+function dropType(el) {
+  CARRIED_TYPE.forEach(p => el.style.removeProperty(p));
+}
+
 function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (err) {} }
 function release(el, e) { try { el.releasePointerCapture(e.pointerId); } catch (err) {} }
 
@@ -485,6 +506,7 @@ class LevelContext {
 
   detach(el, at) {
     const r = at || rectOf(el), b = rectOf(dom.board);
+    carryType(el);                       // before the reparent changes what it inherits
     el.style.width = r.width + 'px';
     el.style.height = r.height + 'px';
     el.style.position = 'absolute';
@@ -599,6 +621,7 @@ class LevelContext {
     if (!ph || !ph.isConnected) return false;
     ['position', 'left', 'top', 'width', 'height', 'margin']
       .forEach(p => span.style.removeProperty(p));
+    dropType(span);                      // back in the sentence, inherit again
     ph.replaceWith(span);
     if (span._sp) span._sp.style.width = '';
     delete span.dataset.lifted;
@@ -1790,8 +1813,11 @@ this.load(first);
          the first level still unsolved — and failing that, back to the start.
          A dead button on the newest level is worse than either. */
       State.saveNow();
+      /* by stage key, not by l.id: a Break stage has no id, so `indexOf(undefined)`
+         reported every one of them as unsolved forever */
+      const here = keyOf(level);
       const unsolved = LEVELS.findIndex(l =>
-        l.id !== level.id && save.solved.indexOf(l.id) < 0);
+        keyOf(l) !== here && save.solved.indexOf(keyOf(l)) < 0);
       this.load(unsolved >= 0 ? unsolved : 0);
     });
 

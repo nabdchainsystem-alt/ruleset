@@ -1,1 +1,407 @@
-/* filled by its batch. */
+/* ==========================================================================
+   THE VAULT — styles
+   --------------------------------------------------------------------------
+   A private notebook inside an impossible interface. Paper-quiet, not
+   parchment; tactile without ornament.
+
+   One deliberate omission: nothing in here ever uses --good. Green means
+   "correct" everywhere else in RULESET, and the Vault has no opinion about
+   whether the player is right. A CERTAIN card is the player's certainty, so
+   it reads in the accent, never in the success colour.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------ icon - */
+.vault-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .22s var(--ease), border-color .22s var(--ease),
+              background .22s var(--ease);
+}
+.vault-icon:hover { color: var(--ink); border-color: var(--line); background: var(--panel); }
+.vault-icon:active { transform: scale(.94); }
+
+/* ----------------------------------------------------------------- scrim - */
+.vault-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 8500;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s var(--ease);
+}
+.vault-scrim.is-on { opacity: 1; pointer-events: auto; }
+
+/* ---------------------------------------------------------------- panel -- */
+.vault {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 8600;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 100vw);
+  background: var(--panel);
+  border-inline-start: 1px solid var(--line);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, .10);
+  font-family: var(--font);
+  color: var(--ink);
+  animation: vaultIn .32s var(--ease-out) both;
+}
+.vault[hidden] { display: none; }
+
+@keyframes vaultIn {
+  from { transform: translateX(6%); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+[dir="rtl"] .vault { animation-name: vaultInRtl; }
+@keyframes vaultInRtl {
+  from { transform: translateX(-6%); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+/* while capturing, the panel steps aside so the puzzle is visible */
+.vault.is-peek { opacity: .06; pointer-events: none; }
+
+/* ----------------------------------------------------------------- head -- */
+.vault-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.vault-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .22em;
+  color: var(--muted);
+}
+.vault-x {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px 7px;
+  margin: -5px -7px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color .2s var(--ease), background .2s var(--ease);
+}
+.vault-x:hover { color: var(--ink); background: var(--bg); }
+
+/* the only sentence the Vault ever says by itself */
+.vault-intro {
+  padding: 20px 18px;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+}
+.vault-intro[hidden] { display: none; }
+.vault-intro-a { font-size: 13px; color: var(--ink); margin-bottom: 4px; }
+.vault-intro-b { font-size: 13px; color: var(--muted); }
+
+/* ----------------------------------------------------------------- tabs -- */
+.vault-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 12px 0;
+}
+.vault-tab {
+  flex: 1;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: 7px 4px;
+  cursor: pointer;
+  transition: color .2s var(--ease), border-color .2s var(--ease);
+}
+.vault-tab:hover { color: var(--ink-soft); }
+.vault-tab.is-on { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* ---------------------------------------------------------------- tools -- */
+.vault-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.vault-filters { display: flex; gap: 6px; }
+.vault-sel { flex: 1; min-width: 0; }
+.vault-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.vault-input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color .18s var(--ease);
+}
+.vault-input:focus { border-color: var(--accent); }
+.vault-input::placeholder { color: var(--muted); }
+select.vault-input { font-size: 11.5px; cursor: pointer; }
+textarea.vault-input { resize: vertical; min-height: 56px; line-height: 1.5; }
+
+.vault-btn {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .18s var(--ease), color .18s var(--ease);
+}
+.vault-btn:hover { border-color: var(--line-2); color: var(--ink); }
+.vault-danger { color: var(--muted); }
+.vault-danger:hover { color: var(--warn); border-color: var(--warn); }
+.vault-btn.is-armed { color: var(--warn); border-color: var(--warn); }
+
+/* ----------------------------------------------------------------- body -- */
+.vault-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.vault-empty {
+  padding: 26px 8px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.vault-note-line {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--accent);
+  padding: 2px 2px 6px;
+}
+
+/* ---------------------------------------------------------------- cards -- */
+.vault-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.vault-card.is-linkable { cursor: pointer; border-style: dashed; }
+.vault-card.is-linkable:hover { border-color: var(--accent); }
+.vault-card.is-linksrc { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+.vault-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.vault-stage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-at { flex: 0 0 auto; opacity: .75; }
+
+/* Fields inside a card drop their borders: a card is a page the player writes
+   on, not a form they fill in. The tone shift alone says "editable". */
+.vault-card .vault-input {
+  border-color: transparent;
+  background: var(--panel);
+}
+.vault-card .vault-input:focus { border-color: var(--accent); }
+
+.vault-title-in { font-weight: 600; }
+.vault-pin-text {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: .04em;
+  color: var(--ink);
+  padding: 5px 8px;
+  border-inline-start: 2px solid var(--accent);
+  background: var(--panel);
+  border-radius: 0 6px 6px 0;
+  word-break: break-word;
+}
+[dir="rtl"] .vault-pin-text { border-radius: 6px 0 0 6px; }
+
+.vault-rule-row { display: flex; gap: 6px; align-items: center; }
+.vault-side { flex: 1; min-width: 0; text-align: center; }
+.vault-rel { width: 54px; flex: 0 0 auto; text-align: center; }
+
+/* the player's confidence, never the game's */
+.vault-conf { display: flex; gap: 4px; }
+.vault-conf-b {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 4px 2px;
+  cursor: pointer;
+  transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
+}
+.vault-conf-b:hover { color: var(--ink-soft); }
+.vault-conf-b.is-on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+.vault-card-acts { display: flex; gap: 4px; justify-content: flex-end; }
+.vault-mini {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: color .18s var(--ease), border-color .18s var(--ease);
+}
+.vault-mini:hover { color: var(--ink); border-color: var(--line); }
+
+/* ---------------------------------------------------------------- links -- */
+.vault-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  font-size: 12px;
+}
+.vault-link-end {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+/* the far end hugs the far edge, so the connector reads as a span between two
+   things rather than a label stuck to the second one */
+.vault-link-mid ~ .vault-link-end { text-align: end; }
+.vault-link-mid { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+
+/* ----------------------------------------------------------------- foot -- */
+.vault-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+}
+.vault-count {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  color: var(--muted);
+}
+
+/* -------------------------------------------------------------- capture -- */
+.vault-capture-bar {
+  position: fixed;
+  inset-block-start: 14px;
+  inset-inline: 0;
+  z-index: 9200;
+  margin-inline: auto;
+  width: max-content;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 15px;
+  border: 1px solid var(--accent);
+  border-radius: 99px;
+  background: var(--panel);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .16);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+html.vault-capturing,
+html.vault-capturing * { cursor: crosshair !important; }
+
+.vault-target {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
+  border-radius: 4px;
+  background: var(--accent-bg) !important;
+}
+
+/* ------------------------------------------------------- save a thought -- */
+.vault-thought {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 11.5px;
+  letter-spacing: .02em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color .2s var(--ease);
+}
+.vault-thought:hover { color: var(--ink); text-decoration: underline; }
+.vault-thought[hidden] { display: none; }
+
+/* ----------------------------------------------------------- responsive -- */
+@media (max-width: 620px) {
+  /* a full-screen sheet, rising from the bottom */
+  .vault {
+    inset: auto 0 0 0;
+    width: 100%;
+    height: 92dvh;
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -20px 60px rgba(0, 0, 0, .22);
+    animation-name: vaultSheet;
+  }
+  @keyframes vaultSheet {
+    from { transform: translateY(8%); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
+  [dir="rtl"] .vault { animation-name: vaultSheet; }
+  .vault-scrim.is-on { background: rgba(0, 0, 0, .28); }
+  .vault-acts { justify-content: stretch; }
+  .vault-acts .vault-btn { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vault { animation: none; }
+}

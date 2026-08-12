@@ -69,7 +69,12 @@ function migrate(raw) {
 
   // v1 fields — the only ones a legacy save is guaranteed to have
   if (Number.isFinite(raw.unlocked)) d.unlocked = Math.max(1, raw.unlocked | 0);
-  if (Array.isArray(raw.solved)) d.solved = raw.solved.filter(Number.isFinite);
+  /* Solved keys were all numbers until Break levels arrived; those save under a
+     routeId string ('B01'). Filtering to numbers here silently erased every
+     Break the player finished, on every reload. */
+  if (Array.isArray(raw.solved)) {
+    d.solved = raw.solved.filter(v => Number.isFinite(v) || (typeof v === 'string' && v !== ''));
+  }
   if (typeof raw.theme === 'string') d.theme = raw.theme;
   if (typeof raw.lang === 'string') d.lang = raw.lang;
 
@@ -303,15 +308,28 @@ const State = {
 
   /** Pretend the player solved levels 1..n, for testing later levels. */
   simulateThrough(n, levels) {
-    (levels || []).forEach(lv => {
-      if (lv.id > n) return;
-      if (data.solved.indexOf(lv.id) < 0) data.solved.push(lv.id);
+    const route = levels || [];
+    /* A stage is saved under its own key: canonical id for an ECHO level,
+       routeId for a Break. Comparing `lv.id > n` skipped every Break (their id
+       is undefined, and undefined > n is false) and then pushed `undefined`
+       into solved. Walk the route to the target stage instead. */
+    const keyOf = st => (st && st.id != null) ? st.id : (st && st.routeId) || null;
+    let stop = route.findIndex(st => keyOf(st) === n);
+    if (stop < 0) {
+      stop = route.reduce((best, st, i) => (st.id != null && st.id <= n ? i : best), -1);
+    }
+    if (stop < 0) stop = Math.min(n, route.length) - 1;
+
+    route.slice(0, stop + 1).forEach(lv => {
+      const key = keyOf(lv);
+      if (key == null) return;
+      if (data.solved.indexOf(key) < 0) data.solved.push(key);
       const taught = lv.mechanicIntroduced;
       if (Array.isArray(taught)) taught.forEach(id => this.learn(id));
       else if (taught) this.learn(taught);
-      this.note(lv.id, { route: 'simulated', at: Date.now() });
+      this.note(key, { route: 'simulated', at: Date.now() });
     });
-    data.unlocked = Math.max(data.unlocked, Math.min(n + 1, (levels || []).length || n + 1));
+    data.unlocked = Math.max(data.unlocked, Math.min(stop + 2, route.length || stop + 2));
     this.saveNow();
   },
 

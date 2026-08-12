@@ -47,12 +47,14 @@
     <div class="underline-row">
       <div class="status" id="status"></div>
       <div class="hintline" id="hintline"></div>
-    </div>
 
-    <!-- discard tray: appears while dragging something discardable -->
-    <div class="void" id="void">
-      <span class="void-label" id="voidLabel">drop to remove</span>
-      <div class="void-items" id="voidItems"></div>
+      <!-- discard tray: appears while dragging something discardable. It hangs
+           off this row rather than the board's floor, so it stays with the
+           puzzle instead of drifting to the bottom of a tall window. -->
+      <div class="void" id="void">
+        <span class="void-label" id="voidLabel">drop to remove</span>
+        <div class="void-items" id="voidItems"></div>
+      </div>
     </div>
 
     <!-- free layer: anything dragged out of normal flow lives here -->

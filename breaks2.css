@@ -1,1 +1,306 @@
-/* filled by its batch. */
+/* ==========================================================================
+   RULESET — Break levels, batch two (B06–B15)
+   Same restraint as the rest: one ink, one accent, one success green.
+   Nothing decorative, nothing that reads as a cipher surface.
+   ========================================================================== */
+
+/* ---- B06 · only one ---------------------------------------------------- */
+.brk-clone {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: .9;
+  touch-action: none;
+  transition: background .3s var(--ease), box-shadow .3s var(--ease);
+}
+.brk-clone.is-one {
+  background: var(--good);
+  box-shadow: 0 0 0 6px var(--good-bg);
+}
+
+/* ---- B07 · the other side --------------------------------------------- */
+.brk-card {
+  position: absolute;
+  perspective: 900px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.brk-card:active { cursor: grabbing; }
+.brk-card-inner {
+  position: relative;
+  width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  transition: transform .34s var(--ease-out);
+}
+.brk-card-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.brk-card-back { transform: rotateY(180deg); }
+.brk-num {
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.brk-num-btn {
+  font-family: var(--mono);
+  font-size: 26px;
+  padding: 10px 26px;
+}
+
+/* ---- B08 · weight ------------------------------------------------------ */
+.brk-plate {
+  position: absolute;
+  border: 2px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  overflow: hidden;
+  transition: border-color .25s var(--ease), transform .18s var(--ease);
+}
+.brk-plate-fill {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 0; height: 100%;
+  background: var(--accent-bg);
+  transition: width .25s var(--ease), background .3s var(--ease);
+}
+.brk-plate.is-loaded { border-color: var(--accent); }
+.brk-plate.is-loaded .brk-plate-fill { background: var(--accent-bg); }
+.brk-plate.is-down {
+  border-color: var(--good);
+  transform: translateY(3px) scale(.98);
+}
+.brk-plate.is-down .brk-plate-fill { background: var(--good-bg); }
+.brk-plate.is-poke { animation: brkPoke .3s var(--ease); }
+@keyframes brkPoke {
+  0%, 100% { transform: translateY(0); }
+  40%      { transform: translateY(1px); }
+}
+.brk-weight {
+  position: absolute;
+  border-radius: 5px;
+  background: var(--ink);
+  opacity: .88;
+  touch-action: none;
+}
+
+/* ---- B09 · one move ---------------------------------------------------- */
+.brk-anchor-dot { opacity: .55; }
+.brk-group {
+  position: absolute;
+  pointer-events: none;   /* the rings are the handles; the box is invisible */
+  touch-action: none;
+}
+.brk-target-ring {
+  position: absolute;
+  width: 38px; height: 38px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--accent-bg);
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  transition: border-color .25s var(--ease), background .25s var(--ease);
+}
+.brk-target-ring.is-on { border-color: var(--good); background: var(--good-bg); }
+
+/* ---- B10 · the hole ---------------------------------------------------- */
+.brk-band {
+  position: absolute;
+  background: var(--ink);
+  border-radius: 2px;
+}
+.brk-hole {
+  position: absolute;
+  border: 2px dashed var(--line-2);
+  border-top: 0; border-bottom: 0;
+  border-radius: 3px;
+  background: transparent;
+  transition: border-color .25s var(--ease);
+}
+.brk-hole.is-open { border-color: var(--accent); }
+.brk-ball {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ink);
+  touch-action: none;
+}
+
+/* ---- B11 · tether ------------------------------------------------------ */
+.brk-rope {
+  position: absolute;
+  height: 2px;
+  background: var(--line-2);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  transition: background .25s var(--ease);
+}
+.brk-rope.is-taut { background: var(--ink-soft); }
+.brk-anchorpt {
+  position: absolute;
+  width: 22px; height: 22px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--panel);
+  touch-action: none;
+}
+.brk-bead {
+  position: absolute;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--ink);
+  touch-action: none;
+}
+
+/* ---- B12 · negative triangle ------------------------------------------ */
+.brk-blob {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: .92;
+}
+.brk-blob.is-nudge { animation: brkNudge .32s var(--ease); }
+@keyframes brkNudge {
+  0%, 100% { transform: scale(1); }
+  45%      { transform: scale(.97); }
+}
+.brk-triangle {
+  position: absolute;
+  pointer-events: none;
+  background: var(--good-bg);
+  clip-path: polygon(50% 8%, 6% 84%, 94% 84%);
+  animation: brkFade .5s var(--ease-out) both;
+}
+@keyframes brkFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- B13 · mirror ------------------------------------------------------ */
+.brk-word {
+  position: absolute;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  color: var(--ink);
+  user-select: none;
+}
+.brk-mirror {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--line-2);
+  border-radius: var(--r-md);
+  /* a slanted sheen, so an empty mirror still reads as a reflective surface */
+  background:
+    linear-gradient(114deg, transparent 34%,
+      color-mix(in srgb, var(--panel) 80%, #fff) 44%,
+      color-mix(in srgb, var(--panel) 74%, var(--accent)) 50%,
+      transparent 60%),
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--panel) 90%, var(--accent)) 0%,
+      var(--panel) 55%,
+      color-mix(in srgb, var(--panel) 90%, var(--ink)) 100%);
+  overflow: hidden;
+  touch-action: none;
+  transition: border-color .3s var(--ease), box-shadow .3s var(--ease);
+}
+/* The letters themselves face away from the player — this is the same word,
+   turned around, in both places. */
+.brk-glyphs {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+.brk-reflection {
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  color: var(--ink);
+  transform: scaleX(-1);      /* a reflection, not a retyping — and flipping
+                                 the already-flipped glyphs inside cancels out,
+                                 which is the whole point of the level */
+  opacity: 0;
+  transition: opacity .35s var(--ease);
+  user-select: none;
+}
+.brk-mirror.is-showing { border-color: var(--accent); }
+.brk-mirror.is-showing .brk-reflection { opacity: 1; cursor: pointer; }
+.brk-mirror.is-read {
+  border-color: var(--good);
+  box-shadow: 0 0 0 5px var(--good-bg);
+}
+.brk-mirror.is-read .brk-reflection { color: var(--good); }
+
+/* ---- B14 · shorter ----------------------------------------------------- */
+.brk-measure {
+  position: absolute;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--ink);
+  transition: background .3s var(--ease);
+}
+.brk-measure.is-b { background: var(--accent); }
+.brk-measure.is-done { background: var(--good); }
+.brk-tag {
+  position: absolute;
+  left: -26px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- B15 · magnet ------------------------------------------------------ */
+.brk-iron { transition: background .3s var(--ease); }
+.brk-iron.is-refuse { animation: brkRefuse .34s var(--ease); }
+@keyframes brkRefuse {
+  0%, 100% { transform: translateX(0); }
+  30%      { transform: translateX(-3px); }
+  65%      { transform: translateX(3px); }
+}
+.brk-magnet {
+  position: absolute;
+  width: 42px; height: 42px;
+  border-radius: 8px;
+  background: var(--warn);
+  touch-action: none;
+  z-index: 4;
+}
+/* the field is drawn, so "one object has a field" is visible, not guessed */
+.brk-field {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--warn) 16%, transparent) 0%,
+    transparent 70%);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width: 620px) {
+  .brk-num { font-size: 24px; }
+  .brk-num-btn { font-size: 22px; padding: 8px 20px; }
+  .brk-word, .brk-reflection { font-size: 26px; letter-spacing: .12em; }
+  .brk-tag { left: -20px; font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brk-plate.is-poke,
+  .brk-blob.is-nudge,
+  .brk-iron.is-refuse { animation: none; }
+  .brk-card-inner { transition-duration: .001ms; }
+}

@@ -99,12 +99,24 @@ window.addEventListener('unhandledrejection', e => {
        placeholder invented, and the word rides the pointer permanently offset. */
     {
       const was = mid(end);
+      const type = p => w.getComputedStyle(end).getPropertyValue(p);
+      const wasType = [type('font-size'), type('font-weight'), type('letter-spacing')];
       pev(w, 'pointerdown', end, was.x, was.y);
       await wait(40);
       const now = mid(end);
       log(Math.abs(now.x - was.x) < 2 && Math.abs(now.y - was.y) < 2,
           'L1 picking a word up does not move it (drift ' +
           Math.round(now.x - was.x) + ',' + Math.round(now.y - was.y) + 'px)');
+
+      /* A word lifted into .loose no longer inherits from .instruction. Without
+         carrying its type across, the glyphs collapse to body size inside the
+         box detach() pinned — the word visibly shrinks away from the pointer. */
+      const nowType = [type('font-size'), type('font-weight'), type('letter-spacing')];
+      log(nowType.join('/') === wasType.join('/'),
+          'L1 a lifted word keeps the sentence type (' + wasType.join('/') +
+          ' → ' + nowType.join('/') + ')');
+      log(parseFloat(nowType[0]) > 20,
+          'and that type is the instruction scale, not body text (' + nowType[0] + ')');
       pev(w, 'pointermove', end, was.x + 120, was.y + 60);
       await wait(30);
       const held = mid(end);
@@ -157,6 +169,38 @@ window.addEventListener('unhandledrejection', e => {
     click(w, btn);
     await wait(40);
     log(!box.solved, 'L3 pressing a red button is refused');
+
+    /* The tray belongs to the puzzle, not to the window. Pinned to the board's
+       floor it stranded itself below the centred stage with a dead gap; it now
+       hangs off the sentence row, so it stays put however tall the viewport is. */
+    {
+      const vr = d.querySelector('#void').getBoundingClientRect();
+      const rr = d.querySelector('.underline-row').getBoundingClientRect();
+      const br = d.querySelector('.board').getBoundingClientRect();
+      const gap = vr.top - rr.bottom;
+      log(gap > 0 && gap < 48, 'L3 the discard tray sits just under the sentence row (' +
+          Math.round(gap) + 'px)');
+      log(d.querySelector('#void').offsetParent === d.querySelector('.underline-row'),
+          'and is measured from that row, not from the floor of the board');
+      log(Math.abs((vr.left + vr.right) / 2 - (br.left + br.right) / 2) < 2,
+          'and stays centred on the board');
+    }
+
+    /* A discardable word dropped back on the sentence must let go of the type
+       detach() pinned to it, or it freezes at the size it was lifted at. */
+    {
+      const rw = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'red');
+      const at = mid(rw);
+      pev(w, 'pointerdown', rw, at.x, at.y);
+      await wait(40);
+      log(!!rw.style.fontSize, 'L3 a lifted word carries its type inline');
+      pev(w, 'pointermove', rw, at.x + 6, at.y + 2);
+      await wait(30);
+      pev(w, 'pointerup', rw, at.x + 6, at.y + 2);
+      await wait(60);
+      log(!rw.style.fontSize && !rw.style.letterSpacing,
+          'and inherits again once it is back in the sentence');
+    }
 
     const red = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'red');
     await dragTo(w, red, mid(d.querySelector('#void')));

@@ -1,1 +1,153 @@
-/* filled by its batch. */
+/* ==========================================================================
+   RULESET — Break levels B26–B30
+   Same restraint as everything else: one ink, one accent, physical objects.
+   These must not look like cipher levels.
+   ========================================================================== */
+
+/* ---- B26 · between ------------------------------------------------------ */
+.brk-face {
+  transition: transform .4s var(--ease), background .3s var(--ease);
+}
+.brk-gap-hit {
+  position: absolute;
+  border-radius: var(--r-md);
+  background: var(--good-bg);
+  border: 2px solid var(--good);
+  opacity: 0;
+  transform: scale(.9);
+  pointer-events: none;
+  transition: opacity .35s var(--ease), transform .45s var(--ease-out);
+}
+.brk-gap-hit.is-on { opacity: 1; transform: scale(1); }
+
+/* ---- B27 · two into one ------------------------------------------------- */
+.brk-twin {
+  position: absolute;
+  border-radius: var(--r-md);
+  background: var(--ink);
+  touch-action: none;
+  transition: box-shadow .25s var(--ease), background .35s var(--ease);
+}
+.brk-twin.is-near { box-shadow: 0 0 0 4px var(--accent-bg); }
+.brk-twin.is-merged {
+  background: var(--good);
+  box-shadow: 0 0 0 5px var(--good-bg);
+}
+
+/* ---- B28 · make room ---------------------------------------------------- */
+.brk-box {
+  position: absolute;
+  border: 2px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  transition: border-color .25s var(--ease), background .3s var(--ease);
+}
+.brk-box.is-hot { border-color: var(--accent); background: var(--accent-bg); }
+.brk-box.is-done { border-color: var(--good); background: var(--good-bg); }
+
+.brk-brick {
+  position: absolute;
+  border-radius: 5px;
+  background: var(--ink-soft);
+  transition: background .3s var(--ease);
+}
+.brk-spare {
+  background: var(--ink);
+  touch-action: none;
+}
+.brk-spare.is-set { background: var(--good); }
+
+/* ---- B29 · the constant ------------------------------------------------- */
+.brk-shift {
+  position: absolute;
+  border-radius: 8px;
+  background: var(--ink-soft);
+  transition: opacity .5s var(--ease), transform .5s var(--ease);
+}
+.brk-shift.is-gone { opacity: 0; }
+.brk-bar-lite { border-radius: 99px; transform-origin: 50% 50%; }
+.brk-word {
+  position: absolute;
+  background: none;
+  font-family: var(--mono);
+  font-size: 17px;
+  letter-spacing: .16em;
+  color: var(--ink);
+  border-radius: 0;
+}
+.stage.brk-steady {
+  border-color: var(--good);
+  background: var(--good-bg);
+  transition: border-color .5s var(--ease), background .7s var(--ease);
+}
+
+/* ---- B30 · change everything -------------------------------------------- */
+.brk-part { transition: box-shadow .35s var(--ease); }
+.brk-part.is-settled { box-shadow: 0 0 0 4px var(--good-bg); }
+
+/* "this has been altered at least once" — the first half of the instruction,
+   shown so the player can tell the level is listening. The second half, that
+   everything must also be back where it started, stays unexplained. */
+.brk-mem {
+  position: absolute;
+  top: -5px;
+  inset-inline-end: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  transition: background .3s var(--ease), border-color .3s var(--ease);
+}
+.brk-mem.is-on { background: var(--accent); border-color: var(--accent); }
+
+.brk-line {
+  position: absolute;
+  border-radius: 99px;
+  background: var(--ink);
+}
+.brk-state {
+  position: absolute;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background .3s var(--ease), border-color .3s var(--ease);
+  border: 2px solid var(--line-2);
+}
+.brk-state.is-a { background: var(--panel); }
+.brk-state.is-b { background: var(--ink-soft); }
+.brk-state.is-c { background: var(--ink); }
+
+.brk-said {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity .8s var(--ease);
+  pointer-events: none;
+}
+.brk-said.is-on { opacity: 1; }
+.brk-said-a,
+.brk-said-b {
+  font-family: var(--mono);
+  font-size: clamp(13px, 2.2vw, 17px);
+  letter-spacing: .18em;
+  text-align: center;
+  color: var(--ink);
+}
+.brk-said-b {
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 1.2s var(--ease);
+}
+.brk-said-b.is-on { opacity: 1; }
+
+@media (max-width: 620px) {
+  .brk-word { font-size: 14px; letter-spacing: .1em; }
+  .brk-said-a, .brk-said-b { font-size: 12px; letter-spacing: .12em; }
+}

@@ -1,1 +1,249 @@
-/* filled by its batch. */
+/* ==========================================================================
+   RULESET — Break levels B16–B25
+   --------------------------------------------------------------------------
+   Same restraint as Season I: one ink, one accent, physical objects, nothing
+   decorative. These must never look like cipher levels.
+   ========================================================================== */
+
+/* ---- B16 all at once ---------------------------------------------------- */
+.brk-pad {
+  position: absolute;
+  width: 56px; height: 56px;
+  border: 2px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--panel);
+  transition: border-color .18s var(--ease), background .18s var(--ease),
+              transform .12s var(--ease);
+}
+.brk-pad.is-down {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  transform: scale(.93);
+}
+.brk-pad.is-done { border-color: var(--good); background: var(--good-bg); }
+
+/* translucent on purpose: the pads must stay readable underneath it */
+.brk-press {
+  position: absolute;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  touch-action: none;
+  z-index: 20;
+  transition: border-color .25s var(--ease), background .25s var(--ease);
+}
+.brk-press.is-done { border-color: var(--good); background: var(--good-bg); }
+
+/* ---- B17 wrap ----------------------------------------------------------- */
+.brk-barrier {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 14px;
+  border-radius: 3px;
+  background: var(--ink);
+}
+/* the only tell that the world is round: a soft breath of light at each edge */
+.brk-edge {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 26px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s var(--ease);
+}
+.brk-edge.is-left  { left: 0;  background: linear-gradient(to right, var(--accent-bg), transparent); }
+.brk-edge.is-right { right: 0; background: linear-gradient(to left,  var(--accent-bg), transparent); }
+.brk-ghost {
+  position: absolute;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- B18 cursor trap ---------------------------------------------------- */
+.brk-lens {
+  position: absolute;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  touch-action: none;
+  transition: border-color .3s var(--ease), background .3s var(--ease);
+}
+.brk-lens.is-hot { border-color: var(--good); background: var(--good-bg); }
+.brk-pointer {
+  position: absolute;
+  width: 22px; height: 22px;
+  touch-action: none;
+  pointer-events: auto;
+}
+.brk-pointer::before,
+.brk-pointer::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.brk-pointer::before { left: 10px; top: 0; width: 2px; height: 22px; }
+.brk-pointer::after  { top: 10px; left: 0; height: 2px; width: 22px; }
+.brk-pointer.is-blocked { animation: brkNudge .3s var(--ease); }
+@keyframes brkNudge {
+  0%, 100% { transform: translateX(0); }
+  40%      { transform: translateX(-4px); }
+  70%      { transform: translateX(3px); }
+}
+
+/* ---- B19 don't let it fall ---------------------------------------------- */
+.brk-faller {
+  position: absolute;
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  background: var(--ink);
+  transition: background .3s var(--ease);
+}
+.brk-faller.is-safe { background: var(--good); }
+.brk-floor {
+  position: absolute;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--ink-soft);
+  touch-action: none;
+  transition: background .3s var(--ease);
+}
+.brk-floor.is-safe { background: var(--good); }
+.brk-danger {
+  position: absolute;
+  left: 0; right: 0;
+  background: repeating-linear-gradient(-45deg,
+    transparent 0 8px, var(--line) 8px 9px);
+  border-top: 1px dashed var(--line-2);
+  pointer-events: none;
+}
+
+/* ---- B20 brake ---------------------------------------------------------- */
+.brk-track {
+  position: absolute;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line);
+}
+.brk-slider {
+  position: absolute;
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  background: var(--ink);
+  transition: background .3s var(--ease);
+}
+.brk-slider.is-done { background: var(--good); }
+.brk-patch {
+  position: absolute;
+  border-radius: 4px;
+  background: repeating-linear-gradient(90deg,
+    var(--line-2) 0 4px, transparent 4px 8px);
+  border: 1px solid var(--line-2);
+  touch-action: none;
+}
+.brk-mark {
+  position: absolute;
+  border: 2px dashed var(--line-2);
+  border-radius: 6px;
+  transition: border-color .25s var(--ease), background .25s var(--ease);
+}
+.brk-mark.is-done { border-style: solid; border-color: var(--good); background: var(--good-bg); }
+
+/* ---- B21 chain ---------------------------------------------------------- */
+.brk-domino {
+  position: absolute;
+  width: 13px;
+  border-radius: 2px;
+  background: var(--ink);
+  transform-origin: 50% 100%;
+  transition: transform .22s cubic-bezier(.4, 0, .6, 1);
+}
+.brk-roller {
+  position: absolute;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  transition: left .5s cubic-bezier(.3, 0, .3, 1), background .3s var(--ease);
+}
+.brk-roller.is-done { background: var(--good); }
+
+/* ---- B22 disappear ------------------------------------------------------ */
+.brk-round {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ink);
+}
+/* fill matches the stage exactly; only the hairline says it is there at all */
+.brk-cover {
+  position: absolute;
+  background: var(--panel);
+  border: 1px dashed var(--line-2);
+  border-radius: 4px;
+  touch-action: none;
+  z-index: 15;
+  transition: border-color .3s var(--ease);
+}
+.brk-cover.is-done { border-color: var(--good); }
+
+/* ---- B23 / B24 frames --------------------------------------------------- */
+.brk-frame {
+  position: absolute;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  touch-action: none;
+  transition: border-color .25s var(--ease), background .25s var(--ease);
+}
+.brk-frame.is-hot { border-color: var(--accent); background: var(--accent-bg); }
+.brk-frame.is-done { border-color: var(--good); background: var(--good-bg); }
+.brk-locked {
+  position: absolute;
+  width: 44px; height: 44px;
+  border-radius: 8px;
+  background: var(--ink);
+  cursor: not-allowed;
+}
+.brk-locked.is-stuck { animation: brkNudge .3s var(--ease); }
+.brk-corner {
+  position: absolute;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--ink);
+  transition: background .25s var(--ease), transform .25s var(--ease);
+}
+.brk-corner.is-met { background: var(--good); transform: scale(1.35); }
+
+/* ---- B25 don't cross the line ------------------------------------------- */
+.brk-ray {
+  position: absolute;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ink);
+  transform-origin: 0 50%;
+  touch-action: none;
+  transition: background .3s var(--ease);
+}
+.brk-ray.is-done { background: var(--good); }
+/* the dot never moves — only which side of the ray it is on changes */
+.dot.brk-above { background: var(--good); }
+.brk-pivot {
+  position: absolute;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--line-2);
+  border: 2px solid var(--ink);
+}
+
+/* narrow screens: nothing here may be clipped or become unreachable */
+@media (max-width: 620px) {
+  .brk-pad { width: 44px; height: 44px; }
+  .brk-locked { width: 36px; height: 36px; }
+  .brk-faller { width: 32px; height: 32px; }
+  .brk-slider { width: 26px; height: 26px; }
+  .brk-pointer { width: 20px; height: 20px; }
+  .brk-pointer::before { left: 9px; height: 20px; }
+  .brk-pointer::after  { top: 9px; width: 20px; }
+}
