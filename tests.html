@@ -2373,6 +2373,43 @@ window.addEventListener('unhandledrejection', e => {
         ' stages set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
   }
 
+  /* --------------------------------------------- level 1: both readings --
+     "Reach the end" should be satisfiable in the direction the sentence
+     actually suggests — carry the dot to the end — as well as by the cleverer
+     reading that brings the end to the dot. Being able to try the obvious
+     thing first is what makes the other one feel fair rather than arbitrary. */
+  {
+    const drag = async (w, el, tx, ty) => {
+      const r = el.getBoundingClientRect();
+      const send = (t, x, y) => el.dispatchEvent(new w.PointerEvent(t,
+        { clientX: x, clientY: y, bubbles: true, pointerId: 1 }));
+      send('pointerdown', r.left + r.width / 2, r.top + r.height / 2);
+      for (let i = 1; i <= 8; i++) {
+        send('pointermove', r.left + r.width / 2 + (tx - r.left - r.width / 2) * i / 8,
+                            r.top + r.height / 2 + (ty - r.top - r.height / 2) * i / 8);
+        await wait(12);
+      }
+      send('pointerup', tx, ty);
+      await wait(150);
+    };
+
+    /* the obvious reading: move the dot to the end */
+    const w1 = await loadLevel(1);
+    const d1 = w1.document;
+    const word1 = d1.querySelector('[data-word="end"]');
+    const wr = word1.getBoundingClientRect();
+    await drag(w1, d1.querySelector('#stage .dot'), wr.left + wr.width / 2, wr.top + wr.height / 2);
+    log(w1.RULESET.solvedNow, 'L1 solves by carrying the dot to the end');
+
+    /* the cleverer reading: bring the end to the dot */
+    const w2 = await loadLevel(1);
+    const d2 = w2.document;
+    const dot2 = d2.querySelector('#stage .dot').getBoundingClientRect();
+    await drag(w2, d2.querySelector('[data-word="end"]'),
+               dot2.left + dot2.width / 2, dot2.top + dot2.height / 2);
+    log(w2.RULESET.solvedNow, 'L1 solves by bringing the end to the dot');
+  }
+
   /* ----------------------------------------- stylesheets: name collisions --
      The Break puzzles are split across four stylesheets, and a class defined
      in two of them silently resolves by load order. That has produced four

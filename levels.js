@@ -52,7 +52,13 @@ window.RULESET_LEVELS = [
     const { w, h } = ctx.size();
 
     const dot = ctx.el('div', 'obj dot', { x: 60, y: Math.round(h / 2 - 11) });
-    ctx.drag(dot, { bounds: 'stage' });
+    /* Not bounded to the stage: "reach the end" should be satisfiable in the
+       direction the sentence actually suggests — by moving the dot to the end,
+       not only by moving the end to the dot. The check below compares the two
+       objects, so whichever one you carry, the meeting is the same. Being able
+       to try the obvious thing is what makes the other reading fair. */
+    ctx.openStage();
+    ctx.drag(dot);
 
     const door = ctx.el('div', 'obj door', { x: w - 90, y: Math.round(h / 2 - 37) });
     const pos = { x: w - 90, y: h / 2 - 37 };

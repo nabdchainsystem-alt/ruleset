@@ -3,86 +3,229 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>RULESET</title>
-<meta name="description" content="A puzzle game where the interface is the puzzle. Seventy-five stages, and no instructions worth trusting.">
-<meta name="theme-color" content="#f4f4f1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0e11" media="(prefers-color-scheme: dark)">
+<title>RULESET — The interface is the puzzle</title>
+<meta name="description" content="A handcrafted puzzle game where every word, button, number and empty space may be part of the answer. Seventy-five stages. No account required.">
+<meta name="theme-color" content="#f3f3ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0b0e" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="RULESET">
-<meta property="og:title" content="RULESET">
-<meta property="og:description" content="A puzzle game where the interface is the puzzle. Seventy-five stages, and no instructions worth trusting.">
+<meta property="og:title" content="RULESET — The interface is the puzzle">
+<meta property="og:description" content="Seventy-five handcrafted stages. No instructions worth trusting.">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="RULESET">
-<meta name="twitter:description" content="A puzzle game where the interface is the puzzle.">
+<meta name="twitter:title" content="RULESET — The interface is the puzzle">
+<meta name="twitter:description" content="Seventy-five handcrafted stages. No instructions worth trusting.">
 <link rel="icon" href="logo-mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="home.css">
+<script src="home.js" defer></script>
 </head>
 <body>
 
-<main class="page">
+<a class="skip-link" href="#main">Skip to content</a>
 
-  <!-- ─────────────── the mark ─────────────── -->
-  <header class="hero">
-    <img class="logo" src="logo.svg" alt="RULESET" width="566" height="105">
-
-    <p class="lede">A puzzle game where the interface is the puzzle.</p>
-
-    <a class="play" href="index.html">
-      Play
-      <span class="play-bar" aria-hidden="true"></span>
+<div class="site-shell">
+  <header class="site-header" aria-label="Main navigation">
+    <a class="brand" href="home.html" aria-label="RULESET home">
+      <img src="logo.svg" alt="RULESET" width="566" height="105">
     </a>
 
-    <p class="under">
-      Seventy-five stages. Nothing to install, nothing to sign up for.
-      Your progress is kept in this browser.
-    </p>
+    <div class="header-meta" aria-hidden="true">
+      <span>75 STAGES</span>
+      <span class="signal"><i></i> ONLINE</span>
+    </div>
+
+    <a class="header-play" href="index.html">
+      Play now
+      <span aria-hidden="true">↗</span>
+    </a>
   </header>
 
-  <!-- ─────────────── what you are walking into ───────────────
-       Deliberately no screenshots and no examples: every concrete image of a
-       stage is a puzzle spent before the player reaches it. -->
-  <section class="facts" aria-label="What RULESET is">
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="kicker reveal">A puzzle game hiding in plain sight</p>
+        <h1 id="hero-title" class="reveal reveal-delay-1">
+          The interface<br>
+          <span>is the puzzle.</span>
+        </h1>
+        <p class="hero-lede reveal reveal-delay-2">
+          Every instruction is exact. Every assumption is yours.
+          Learn a language made of buttons, words, space and doubt.
+        </p>
+        <div class="hero-actions reveal reveal-delay-3">
+          <a class="button button-primary" href="index.html">
+            <span>Enter RULESET</span>
+            <span class="button-arrow" aria-hidden="true">→</span>
+          </a>
+          <a class="text-link" href="#premise">Understand the premise <span aria-hidden="true">↓</span></a>
+        </div>
+        <div class="hero-facts reveal reveal-delay-3" aria-label="Game details">
+          <span>01</span><p>Browser native</p>
+          <span>02</span><p>No account</p>
+          <span>03</span><p>Progress saved locally</p>
+        </div>
+      </div>
 
-    <article class="fact">
-      <h2>Everything is fair game</h2>
-      <p>
-        The words. The buttons. The number in the corner. The size of your
-        window. If it is on the screen, it may be part of the puzzle — including
-        the parts that look like ordinary software.
-      </p>
-    </article>
+      <div class="hero-playground reveal reveal-delay-2" aria-label="A small demonstration of RULESET">
+        <div class="stage-card" id="demoStage">
+          <div class="stage-head">
+            <span class="mini-mark">RULESET<i></i></span>
+            <span class="stage-progress" aria-hidden="true"><i></i></span>
+            <span class="stage-count">00 / 75</span>
+          </div>
 
-    <article class="fact">
-      <h2>Read the instruction carefully</h2>
-      <p>
-        Every stage tells you exactly what to do. Doing exactly that is rarely
-        enough. Nothing here is a trick for its own sake: once you see it, it
-        was always there.
-      </p>
-    </article>
+          <div class="stage-body">
+            <p class="stage-instruction">Complete the instruction.</p>
+            <div class="demo-sentence" id="demoSentence">
+              <span>The interface is the</span>
+              <span class="drop-target" id="dropTarget" aria-hidden="true"></span>
+            </div>
+            <button class="word-chip" id="wordChip" type="button" aria-describedby="dragHelp" aria-label="Move puzzle into the empty space. Press Enter to complete, or use arrow keys to move it.">
+              puzzle.
+            </button>
+            <p class="drag-help" id="dragHelp">Drag the blue word into the empty space.</p>
+          </div>
 
-    <article class="fact">
-      <h2>Two seasons</h2>
-      <p>
-        The first teaches you how this thing thinks. The second assumes you were
-        paying attention. There is a way through every stage, and a hint waiting
-        if you want one.
-      </p>
-    </article>
+          <div class="stage-foot">
+            <span id="demoStatus" aria-live="polite">A SMALL DEMONSTRATION</span>
+            <button class="demo-reset" id="demoReset" type="button" hidden>Reset</button>
+            <span>HINT</span>
+          </div>
 
-  </section>
+          <div class="stage-success" id="demoSuccess" aria-hidden="true">
+            <span class="success-mark">✓</span>
+            <span><b>SOLVED</b> You noticed the interface.</span>
+          </div>
+        </div>
+        <p class="playground-caption"><span>INTERACTIVE SPECIMEN</span><span>POINTER / TOUCH / KEYS</span></p>
+      </div>
 
-  <footer class="foot">
-    <a class="foot-play" href="index.html">Start at the first stage</a>
-    <p class="foot-note">
-      Built with no frameworks and no build step —
-      it is a folder of HTML, CSS and JavaScript.
-    </p>
+      <div class="scroll-cue" aria-hidden="true"><i></i><span>SCROLL TO UNLEARN</span></div>
+    </section>
+
+    <section class="manifesto" id="premise" aria-labelledby="premise-title">
+      <div class="section-index">
+        <span>01</span>
+        <p>THE PREMISE</p>
+      </div>
+      <div class="manifesto-copy">
+        <p class="manifesto-lead" id="premise-title">
+          Most games give you a world.<br>
+          <em>RULESET gives you a screen</em> — then quietly makes every part of it matter.
+        </p>
+        <div class="manifesto-grid">
+          <article>
+            <span class="article-number">A</span>
+            <h2>Everything is fair game</h2>
+            <p>The words. The counter. The progress bar. The size of your window. If it is visible, it may be part of the answer.</p>
+          </article>
+          <article>
+            <span class="article-number">B</span>
+            <h2>Nothing is arbitrary</h2>
+            <p>The possibility is always visible. The idea is yours to find. Once you see a solution, it feels inevitable.</p>
+          </article>
+          <article>
+            <span class="article-number">C</span>
+            <h2>Attention compounds</h2>
+            <p>The first stages teach you how this thing thinks. The ones after that remember whether you were listening.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapters" aria-labelledby="chapters-title">
+      <div class="chapters-intro">
+        <div class="section-index section-index-light">
+          <span>02</span>
+          <p>THE DESCENT</p>
+        </div>
+        <h2 id="chapters-title">Two seasons.<br>One changing language.</h2>
+        <p>Seventy-five handcrafted encounters, sequenced to turn curiosity into instinct.</p>
+      </div>
+
+      <div class="chapter-list">
+        <article class="chapter chapter-one">
+          <div class="chapter-top">
+            <span>SEASON I</span>
+            <span>01—15</span>
+          </div>
+          <div class="chapter-body">
+            <div class="chapter-glyph glyph-one" aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+            </div>
+            <div>
+              <p class="chapter-label">THE SURFACE</p>
+              <h3>Learn what can be touched.</h3>
+              <p>Fifteen precise lessons in the hidden physicality of ordinary software.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="chapter chapter-two">
+          <div class="chapter-top">
+            <span>SEASON II — ECHO</span>
+            <span>16—45</span>
+          </div>
+          <div class="chapter-body">
+            <div class="chapter-glyph glyph-two" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <div>
+              <p class="chapter-label">THE LANGUAGE</p>
+              <h3>Learn what can be remembered.</h3>
+              <p>Thirty stages that turn information into an object — and attention into a cipher.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="chapter chapter-breaks">
+          <div class="chapter-top">
+            <span>THE BREAKS</span>
+            <span>B01—B30</span>
+          </div>
+          <div class="chapter-body">
+            <div class="chapter-glyph glyph-three" aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <div>
+              <p class="chapter-label">THE INTERRUPTIONS</p>
+              <h3>Lose the thread. Find it again.</h3>
+              <p>Thirty one-idea puzzles placed exactly where certainty becomes comfortable.</p>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="numbers" aria-label="RULESET by the numbers">
+      <div class="number-block"><strong>75</strong><span>handcrafted stages</span></div>
+      <div class="number-block"><strong>02</strong><span>complete seasons</span></div>
+      <div class="number-block"><strong>00</strong><span>accounts required</span></div>
+      <div class="number-block"><strong>∞</strong><span>things worth questioning</span></div>
+    </section>
+
+    <section class="finale" aria-labelledby="finale-title">
+      <div class="finale-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p>YOUR FIRST INSTRUCTION</p>
+      <h2 id="finale-title">Begin.</h2>
+      <a class="button button-final" href="index.html">
+        <span>Play from stage one</span>
+        <span class="button-arrow" aria-hidden="true">→</span>
+      </a>
+      <span class="finale-note">Free to play · No install · Works in your browser</span>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="footer-brand" href="home.html">RULESET<i></i></a>
+    <p>A puzzle game where the interface is the puzzle.</p>
+    <div>
+      <span>EN / عربي in game</span>
+      <a href="index.html">ENTER ↗</a>
+    </div>
   </footer>
-
-</main>
+</div>
 
 </body>
 </html>

@@ -1033,6 +1033,12 @@ class LevelContext {
     return list;
   }
 
+  /** Let this level's objects leave the stage without being clipped. */
+  openStage() {
+    dom.stage.classList.add('is-open');
+    this.own(() => dom.stage.classList.remove('is-open'));
+  }
+
   /**
    * Let an object be dragged out of the stage and stay there. The stage stops
    * clipping it and it moves to the free layer the moment it crosses the edge.
