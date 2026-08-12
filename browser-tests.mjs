@@ -216,6 +216,36 @@ async function run(name, engine) {
   }
   await phone.close();
 
+  /* ---- storage that refuses to be written -------------------------------
+     Safari in private browsing exposes localStorage but throws on every
+     write. A game that saves on each solve can die on boot there, which is
+     the worst possible first impression: a blank page, on a phone, silently. */
+  {
+    const jail = await browser.newContext();
+    const jp = await jail.newPage();
+    const jerrs = [];
+    jp.on('pageerror', e => jerrs.push(e.message));
+    await jp.addInitScript(() => {
+      const real = window.localStorage;
+      Object.defineProperty(window, 'localStorage', { configurable: true, get: () => ({
+        getItem: k => real.getItem(k),
+        setItem: () => { throw new DOMException('QuotaExceededError'); },
+        removeItem: () => { throw new DOMException('QuotaExceededError'); },
+        clear: () => { throw new DOMException('QuotaExceededError'); },
+        key: i => real.key(i), get length() { return real.length; }
+      })});
+    });
+    await jp.goto(BASE + '/index.html', { waitUntil: 'load' });
+    await jp.waitForTimeout(900);
+    ok(await jp.locator('#stage').evaluate(el => el.children.length) > 0,
+       `${name}: the game still boots when localStorage refuses writes`);
+    ok(await jp.locator('.stage-failed').count() === 0,
+       `${name}: unwritable storage is not treated as a crash`);
+    ok(jerrs.length === 0,
+       `${name}: unwritable storage throws nothing${jerrs.length ? ' → ' + jerrs[0] : ''}`);
+    await jail.close();
+  }
+
   ok(noise.length === 0, `${name}: no console errors${noise.length ? ' → ' + noise.slice(0, 3).join(' | ') : ''}`);
 
   await browser.close();
