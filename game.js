@@ -1279,6 +1279,12 @@ const CHROME = {
   echoTray(ctx, opts) {
     const el = dom.echoTray;
     el.classList.add('is-live');
+    /* Repaint under the live flag. The tray hides itself when it is empty,
+       which is right for chrome and fatal for a drop target: level 36 is the
+       level that INTRODUCES carrying, so its tray is necessarily empty, and a
+       hidden element is 0x0 — the token could never reach it and the stage
+       could not be finished. */
+    engine.paintEchoTray();
     ctx.own(() => { el.classList.remove('is-live'); engine.paintEchoTray(); });
     return {
       el,
@@ -1910,8 +1916,19 @@ this.load(first);
     const el = dom.echoTray;
     if (!el) return;
     const held = State.tray ? State.tray() : [];
+    const live = el.classList.contains('is-live');
     el.textContent = '';
-    if (!held.length) { el.hidden = true; return; }
+    if (!held.length) {
+      /* empty and not claimed: stay out of the way entirely */
+      if (!live) { el.hidden = true; return; }
+      /* empty but claimed: show the slot, in the game's own drop-target
+         vocabulary — a dashed outline — so there is something to aim at */
+      const slot = document.createElement('span');
+      slot.className = 'echo-slot';
+      el.appendChild(slot);
+      el.hidden = false;
+      return;
+    }
     held.forEach(tok => {
       const chip = document.createElement('span');
       chip.className = 'echo-token';

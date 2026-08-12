@@ -1149,6 +1149,20 @@ button { font: inherit; color: inherit; }
 .echo-hole.is-filled { border-color: transparent; }
 /* 8 × 52px + 7 × 8px gaps = 472px. Give it room, or the eighth token orphans
    onto a second row and the sequence stops reading as a sequence. */
+/* The empty slot a claimed tray shows, so there is a target to drop onto.
+   Dashed outline: the same vocabulary every other drop target in the game
+   uses, so it needs no explaining. */
+.echo-slot {
+  display: inline-block;
+  width: 30px;
+  height: 17px;
+  border: 1px dashed var(--line-2, var(--line));
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.echo-tray.is-live .echo-slot { border-color: var(--accent); opacity: .55; }
+
 .echo-tray { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 500px; }
 .echo-tile {
   width: 52px; height: 52px;

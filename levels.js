@@ -2022,7 +2022,12 @@ window.RULESET_LEVELS = [
     const lamp = ctx.el('div', 'echo-lamp', {
       x: Math.round(w * 0.12), y: Math.round(h * 0.78)
     });
-    ctx.drag(lamp, { affordance: false, bounds: 'stage' });
+    /* The lamp carries the normal grab affordance. It was suppressed, which
+       made the one interactive object on a dark stage indistinguishable from
+       scenery — contract rule 8, "no invisible clickable areas". Knowing the
+       lamp can be carried gives away nothing: what is hidden, and where, is
+       still the whole puzzle. */
+    ctx.drag(lamp, { bounds: 'stage' });
 
     /* the darkness is a mask with a hole in it, and the lamp is the hole */
     ctx.frame(() => {

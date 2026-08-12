@@ -225,6 +225,14 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
       x: Math.round(w * 0.78), y: Math.round(h * 0.46)
     });
 
+    /* The sentence says "the button", and nothing on this stage looks like a
+       button: a lamp, a slab, and a pale ring. Which of the three the sentence
+       is about was never the puzzle — the puzzle is pressing it from a
+       distance — but without knowing, the sentence has no subject and pressing
+       each object in turn teaches nothing, because none of them answer. So it
+       is named, and only that. */
+    const named = ctx.note(sensor, { en: 'the button', ar: 'الزر' });
+
     ctx.drag(lamp, { affordance: false, bounds: 'stage' });
     ctx.drag(blockObj, { affordance: false, bounds: 'stage' });
 
@@ -248,6 +256,7 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
       if (held < 0.6) return;
 
       done = true;
+      if (named) named.done();
       sensor.classList.add('is-on');
       ctx.after(560, () => ctx.solve());
     });
