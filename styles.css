@@ -163,7 +163,11 @@ button { font: inherit; color: inherit; }
 }
 
 /* progress ------------------------------------------------------------- */
-.progress { width: min(340px, 42vw); }
+/* relative: levels park a token against the bar with an absolute offset. Left
+   static, that offset resolved against .topbar instead and pushed the token
+   past the right edge of the page — which widened the layout viewport on
+   phones and zoomed the whole level out. */
+.progress { position: relative; width: min(340px, 42vw); }
 
 .progress-track {
   position: relative;
@@ -1784,10 +1788,15 @@ kbd {
      cannot sit on one 430px line. Left unwrapped they stretched the whole app
      wider than the viewport, which silently clipped every level. Two centred
      rows instead, controls above, level identity below. */
-  .bottombar { flex-wrap: wrap; gap: 8px; padding: 9px 10px; }
-  .bottom-right { order: 1; width: 100%; justify-content: center; flex-wrap: wrap; gap: 6px; }
+  /* Two rows, and it has to STAY two rows: the six controls measure ~338px at
+     375px wide, so the side padding, the gap and the button padding are all
+     part of the fit. A later `padding: 10px 14px` used to re-declare this rule
+     and cost 8px, which was enough to drop the theme toggle onto a third row
+     of its own. One declaration only. */
+  .bottombar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .bottom-right { order: 1; width: 100%; justify-content: center; flex-wrap: wrap; gap: 5px; }
   .bottom-left { order: 2; width: 100%; justify-content: center; gap: 12px; }
-  .bottombar .btn { padding: 7px 11px; font-size: 11.5px; }
+  .bottombar .btn { padding: 7px 10px; font-size: 11.5px; }
   .bottom-sep { display: none; }
   .sea-link { font-size: 9px; letter-spacing: .1em; }
 
@@ -1795,10 +1804,28 @@ kbd {
   .progress { width: 40vw; }
   .board { gap: 14px; padding: 16px 12px; }
   .instruction { max-width: 20ch; }
-  .stage { height: clamp(280px, 42vh, 420px); border-radius: var(--r-md); }
-  .bottombar { padding: 10px 14px; }
+  /* The stage was a flat 280px here. Taller boards — the eight-node ring, the
+     row of answer slots, the practice keypad — were sliced off top and bottom
+     by `overflow: hidden` while 150px of board sat empty underneath them. Let
+     it claim the space the board actually has instead, with the old height as
+     the floor so nothing is ever smaller than it was. */
+  .stage {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 280px;
+    max-height: 460px;
+    border-radius: var(--r-md);
+  }
   .level-name { display: none; }
   .dev { right: 10px; left: 10px; width: auto; }
+}
+
+/* Small Androids (320–360px) are ~15px short of the six-control row. Buy it
+   back from the gap and the button padding rather than a third row. */
+@media (max-width: 360px) {
+  .bottombar { padding: 10px 8px; }
+  .bottom-right { gap: 4px; }
+  .bottombar .btn { padding: 7px 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

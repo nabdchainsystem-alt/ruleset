@@ -3,6 +3,7 @@ node_modules/
 *.log
 .impeccable/
 _probe.html
+_perf.html
 _shot*.html
 _sea.html
 _g[0-9].html

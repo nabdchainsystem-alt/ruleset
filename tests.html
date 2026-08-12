@@ -2234,9 +2234,85 @@ window.addEventListener('unhandledrejection', e => {
     const realErr = w.console.error;
     w.console.error = (...a) => { errs.push(a.join(' ')); realErr.apply(w.console, a); };
     w.addEventListener('error', e => errs.push('throw: ' + e.message));
-    for (let i = 0; i < w.RULESET_LEVELS.length; i++) { w.RULESET.load(i); await wait(90); }
-    log(errs.length === 0, 'all ' + w.RULESET_LEVELS.length +
-        ' levels set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
+    /* every stage in the PLAYED route, not RULESET_LEVELS: the route is 75
+       stages and RULESET_LEVELS is 45, so walking the shorter one stopped at
+       play position 44 and never instantiated B15-B30 — while reporting that
+       as full coverage */
+    const stages = w.RULESET_ROUTE.build(w.RULESET_LEVELS, w.RULESET_BREAKS).length;
+    for (let i = 0; i < stages; i++) { w.RULESET.load(i); await wait(90); }
+    log(stages === 75, 'the sweep covers all 75 stages, not just the 45 numbered ones');
+    log(errs.length === 0, 'all ' + stages +
+        ' stages set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
+  }
+
+  /* ------------------------------------------- engine: failure states --
+     A stage is a hand-written script and any of them can throw. What must
+     never happen is a player left on a blank board with no way out. */
+  {
+    const w = await loadLevel(1);
+    const d = w.document;
+
+    w.RULESET_LEVELS[1].setup = () => { throw new Error('deliberate sabotage'); };
+    w.RULESET.load(1);
+    await wait(200);
+    const card = d.querySelector('.stage-failed');
+    log(!!card, 'a stage whose setup() throws shows a recovery card, not a blank board');
+    log(!!card && card.querySelectorAll('button').length === 2,
+        'the recovery card offers two ways out');
+    log(!!card && !/sabotage/.test(card.textContent),
+        'a normal player never sees the stack trace');
+    log(w.RULESET.index === 1, 'a failed stage does not silently skip itself');
+
+    card.querySelectorAll('button')[1].click();
+    await wait(200);
+    log(w.RULESET.index === 2, '"Move on" gets the player past a broken stage');
+    log(!d.querySelector('.stage-failed'), 'the card clears once the player moves on');
+
+    /* developers still get the truth */
+    w.RULESET.toggleDev(true);
+    w.RULESET_LEVELS[3].setup = () => { throw new Error('deliberate sabotage'); };
+    w.RULESET.load(3);
+    await wait(200);
+    log(/sabotage/.test((d.querySelector('.stage-failed') || {}).textContent || ''),
+        'dev mode does show the trace');
+    w.RULESET.toggleDev(false);
+
+    /* the soft failure: an uncaught error offers an exit without taking the
+       stage away — wiping a puzzle mid-solve would be the worse bug */
+    w.RULESET.load(0);
+    await wait(200);
+    const stageWas = d.querySelector('#stage').children.length;
+    w.dispatchEvent(new w.ErrorEvent('error', { message: 'stray' }));
+    await wait(150);
+    log(!!d.querySelector('.recovery-bar'), 'an uncaught error offers a recovery bar');
+    log(d.querySelector('#stage').children.length === stageWas,
+        'and does not destroy the stage the player is in the middle of');
+    w.dispatchEvent(new w.ErrorEvent('error', { message: 'again' }));
+    await wait(150);
+    log(d.querySelectorAll('.recovery-bar').length === 1,
+        'repeated errors fold into a single bar');
+  }
+
+  /* ------------------------------------------- engine: stage bookkeeping --
+     Break stages save under a string routeId and carry no numeric id. Every
+     per-stage record must therefore be keyed by the stage key, or all thirty
+     of them share one row called "undefined". This class of bug has already
+     shipped twice. */
+  {
+    const w = await loadLevel(1);
+    const R = w.RULESET_ROUTE;
+    const played = R.build(w.RULESET_LEVELS, w.RULESET_BREAKS);
+    const firstBreak = played.findIndex(R.isBreak);
+    w.RULESET.load(firstBreak);
+    await wait(150);
+    log(w.RULESET_STATE.currentLevel === played[firstBreak].routeId,
+        'a Break stage records itself under its routeId, not undefined');
+    w.RULESET.restart();
+    await wait(150);
+    const rows = w.RULESET_STATE.data.ledger || {};
+    log(!('undefined' in rows), 'no stage writes to a row called "undefined"');
+    log((w.RULESET_STATE.row(played[firstBreak].routeId).restarts || 0) >= 1,
+        'a Break stage restart is counted against that stage');
   }
 
   lines.push('');

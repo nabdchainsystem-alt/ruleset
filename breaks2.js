@@ -81,7 +81,10 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
 
   hint: { en: 'You have inspected one side.', ar: 'لقد فحصت وجهًا واحدًا.' },
   hint2: { en: 'Is this really a flat panel?', ar: 'هل هذه حقًا لوحة مسطّحة؟' },
-  hint3: { en: 'Turn the card over.', ar: 'اقلب البطاقة.' },
+  hint3: {
+    en: 'Drag the card sideways to turn it over, then press what is on the back.',
+    ar: 'اسحب البطاقة أفقيًا لتقلبها، ثم اضغط ما على ظهرها.'
+  },
   note: { en: 'Objects may have backs.', ar: 'قد يكون للأشياء ظهور.' },
 
   setup(ctx) {
@@ -273,7 +276,10 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
 
   hint: { en: 'The ball does not have to change.', ar: 'الكرة ليست مضطرة للتغيّر.' },
   hint2: { en: 'The obstacle has a size too.', ar: 'العائق له حجم أيضًا.' },
-  hint3: { en: 'Make the hole larger.', ar: 'وسّع الفتحة.' },
+  hint3: {
+    en: 'Widen the gap by its corner until the ball fits through it.',
+    ar: 'وسّع الفتحة من زاويتها حتى تتسع للكرة.'
+  },
   note: { en: 'The obstacle has a size too.', ar: 'العائق له حجم أيضًا.' },
 
   setup(ctx) {
@@ -490,8 +496,14 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
   instruction: { en: 'MAKE THIS READ CORRECTLY', ar: 'اجعل هذا يُقرأ صحيحًا' },
 
   hint: { en: 'The letters may already be correct.', ar: 'قد تكون الحروف صحيحة أصلًا.' },
-  hint2: { en: 'Change how you see them.', ar: 'غيّر طريقة رؤيتك لها.' },
-  hint3: { en: 'Use the mirror.', ar: 'استخدم المرآة.' },
+  hint2: {
+    en: 'There is a mirror in the room, and it can be moved.',
+    ar: 'في الغرفة مرآة، ويمكن تحريكها.'
+  },
+  hint3: {
+    en: 'Hold the mirror up under the word, then press the reflection.',
+    ar: 'ارفع المرآة تحت الكلمة، ثم اضغط الانعكاس.'
+  },
   note: { en: 'The letters were right all along.', ar: 'كانت الحروف صحيحة طوال الوقت.' },
 
   setup(ctx) {

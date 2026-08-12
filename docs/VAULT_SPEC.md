@@ -1,5 +1,8 @@
 # The Vault — specification
 
+> **Status: verified against `vault.js` as shipped**, except where a line is
+> marked UNVERIFIED.
+
 ## Why it exists
 
 RULESET asks the player to hold a lot in their head at once. By Season II they
@@ -40,6 +43,12 @@ into Season II. That timing is deliberate:
 
 Before B03 the icon does not exist in the DOM at all. `RULESET_VAULT.unlocked()`
 returns `false`, and the module sits inert.
+
+Concretely, `unlocked()` is `State.data.solved.indexOf('B03') >= 0` — the
+**stage key**, which for a Break stage is its `routeId`. A player who *skips*
+B03 never unlocks the Vault; that is intentional and constraint 6 below covers
+the consequence. A polling `setInterval` mounts the icon within a second of B03
+being banked, so no reload is needed.
 
 ## What lives in it
 
@@ -185,8 +194,8 @@ Exposed for the dev panel and for tests. Not used by any level.
 
 ```js
 RULESET_VAULT.unlocked()          // bool
-RULESET_VAULT.open() / .close() / .toggle()
-RULESET_VAULT.items(kind?)        // newest first
+RULESET_VAULT.items(kind?)        // all items, or just one kind
+RULESET_VAULT.item(id)            // one item, or null
 RULESET_VAULT.links()
 RULESET_VAULT.add(kind, fields)   // → item
 RULESET_VAULT.update(id, fields)
@@ -194,10 +203,23 @@ RULESET_VAULT.remove(id)          // also removes its links
 RULESET_VAULT.move(id, delta)
 RULESET_VAULT.link(a, b) / .unlink(linkId)
 RULESET_VAULT.clear()
+RULESET_VAULT.saveNow()
 RULESET_VAULT.data                // the raw store, for assertions
 ```
 
+**There is no `open()`, `close()` or `toggle()` on the public object.** An
+earlier draft of this document listed them; they were never exported. The panel
+is opened by the player: the Vault icon, the `V` key (suppressed while typing in
+a field), or the **Save a thought** line on the success card. A test that needs
+the panel open must drive one of those.
+
 ## Verified
+
+> **This list is inherited from the Vault's own build session and was NOT
+> re-run by the release documentation audit.** Treat it as the author's claim,
+> not as release evidence. `RELEASE_AUDIT.md` is where re-verification for this
+> release is recorded. The items below were each checked against the source and
+> are consistent with it; only the *headless driving* is unconfirmed.
 
 Driven headlessly against a served build:
 

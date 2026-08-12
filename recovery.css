@@ -1,0 +1,113 @@
+/* ==========================================================================
+   RULESET — failure states
+   --------------------------------------------------------------------------
+   A stage is a hand-written script and any of them can throw. What a player
+   must never meet is a blank board with no way out.
+
+   These read as part of the game, not as a browser error: same tokens, same
+   restraint, no red panic. Something did not load; here are two doors.
+   ========================================================================== */
+
+.stage-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 180px;
+  padding: 34px 22px;
+  margin: auto;
+  max-width: 460px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-lg);
+  color: var(--ink-soft);
+}
+
+.stage-failed-head {
+  font-size: 15px;
+  color: var(--ink);
+  letter-spacing: .01em;
+}
+
+.stage-failed-sub {
+  font-size: 13px;
+  color: var(--muted);
+  /* the sentence that matters most: nothing was lost */
+}
+
+.stage-failed-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* dev only — a player never reaches this branch */
+.stage-failed-trace {
+  margin-top: 14px;
+  max-width: 100%;
+  max-height: 200px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------------------------
+   The softer failure: the stage is still standing, so this offers an exit
+   without taking anything away. It floats clear of the bottom bar and of the
+   iOS home indicator.
+   -------------------------------------------------------------------------- */
+.recovery-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 28px);
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .14);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  animation: recovery-in .28s var(--ease-out) both;
+}
+
+.recovery-bar span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes recovery-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recovery-bar { animation: none; }
+}
+
+/* narrow phones: stack rather than squeeze the message to nothing */
+@media (max-width: 420px) {
+  .recovery-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+  }
+  .recovery-bar span { flex-basis: 100%; white-space: normal; }
+}

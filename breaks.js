@@ -201,8 +201,14 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
   instruction: { en: 'PRESS THE BUTTON WITHOUT TOUCHING IT', ar: 'اضغط الزر دون أن تلمسه' },
 
   hint: { en: 'Touch is not the only way to affect something.', ar: 'اللمس ليس الطريقة الوحيدة للتأثير.' },
-  hint2: { en: 'What else can reach the button?', ar: 'ما الذي يمكنه بلوغ الزر أيضًا؟' },
-  hint3: { en: 'Use the shadow.', ar: 'استخدم الظل.' },
+  hint2: {
+    en: 'The lamp casts a shadow, and a shadow reaches further than you can.',
+    ar: 'المصباح يُلقي ظلًا، والظل يبلغ أبعد مما تبلغ.'
+  },
+  hint3: {
+    en: 'Stand the block between the lamp and the sensor.',
+    ar: 'ضع الكتلة بين المصباح والمستشعر.'
+  },
   note: { en: 'A shadow reaches further than a hand.', ar: 'الظل يبلغ أبعد من اليد.' },
 
   setup(ctx) {

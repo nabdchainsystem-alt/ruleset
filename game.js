@@ -483,8 +483,11 @@ class LevelContext {
     const next = el.nextSibling;
     const style = el.getAttribute('style');
     this.own(() => {
+      /* cssText rather than setAttribute('style'): identical result, but it
+         goes through CSSOM, so the shipped Content-Security-Policy does not
+         have to grant style-src 'unsafe-inline' for this one line */
       if (style == null) el.removeAttribute('style');
-      else el.setAttribute('style', style);
+      else el.style.cssText = style;
       if (parent) parent.insertBefore(el, next);
     });
     return {
@@ -1081,15 +1084,15 @@ class LevelContext {
   act(type, detail) { return State.record(type, detail); }
 
   /** Put an object into the inventory, tagged with this level. */
-  give(id, payload) { return State.give(id, this.level.id, payload); }
+  give(id, payload) { return State.give(id, keyOf(this.level), payload); }
   take(id) { return State.take(id); }
   hasItem(id) { return State.has(id); }
 
   /** Note how this level was solved, when more than one route exists. */
-  route(name) { State.note(this.level.id, { route: name }); return name; }
+  route(name) { State.note(keyOf(this.level), { route: name }); return name; }
 
   /** Remember an answer the player typed, for a later level to ask about. */
-  remember(answer) { State.note(this.level.id, { answer: String(answer) }); }
+  remember(answer) { State.note(keyOf(this.level), { answer: String(answer) }); }
 
   /* -------------------------------------------------------------- kill --- */
 
@@ -1150,7 +1153,10 @@ const CHROME = {
     ctx.own(() => {
       el.classList.remove('is-live');
       el.removeAttribute('contenteditable');
-      el.textContent = String(LEVELS[engine.index].id).padStart(2, '0');
+      /* same guard the loader uses: a Break stage has no canonical number and
+         must show the dot, not the string "undefined" */
+      const back = LEVELS[engine.index];
+      el.textContent = back && back.id != null ? String(back.id).padStart(2, '0') : '·';
     });
 
     if (opts.editable) {
@@ -1289,6 +1295,101 @@ const engine = {
   rafId: 0,
   lastT: 0,
 
+  /* ---------------------------------------------------------- failure -- */
+  /* A stage is a hand-written script. If one throws, the player must not be
+     left staring at an empty board with no way out — that is the difference
+     between a bug and a dead end. Two severities:
+
+       setup() threw      the stage never built. Nothing to play. Full card.
+       something threw    the stage may still be fine. A bar, never a takeover,
+       later              because destroying a working puzzle over a stray
+                          error would be worse than the error.
+
+     Stack traces are for the console and for dev mode. A player gets a way
+     forward and nothing else. */
+  stageFailed(err) {
+    console.error('stage failed', err);
+    if (this.ctx) { try { this.ctx.destroy(); } catch (e) {} this.ctx = null; }
+    dom.stage.innerHTML = '';
+    dom.loose.innerHTML = '';
+    dom.instr.textContent = '';
+
+    const box = document.createElement('div');
+    box.className = 'stage-failed';
+    box.setAttribute('role', 'alert');
+
+    const head = document.createElement('p');
+    head.className = 'stage-failed-head';
+    head.textContent = t({ en: 'This stage did not load.',
+                           ar: 'لم تُحمّل هذه المرحلة.' });
+    box.appendChild(head);
+
+    const sub = document.createElement('p');
+    sub.className = 'stage-failed-sub';
+    sub.textContent = t({ en: 'Your progress is safe.',
+                          ar: 'تقدّمك محفوظ.' });
+    box.appendChild(sub);
+
+    const row = document.createElement('div');
+    row.className = 'stage-failed-actions';
+
+    const again = document.createElement('button');
+    again.className = 'btn btn-primary';
+    again.type = 'button';
+    again.textContent = t({ en: 'Try again', ar: 'حاول مرة أخرى' });
+    again.addEventListener('click', () => this.load(this.index));
+    row.appendChild(again);
+
+    const on = document.createElement('button');
+    on.className = 'btn';
+    on.type = 'button';
+    on.textContent = t({ en: 'Move on', ar: 'تخطَّ' });
+    on.addEventListener('click', () => this.next());
+    row.appendChild(on);
+    box.appendChild(row);
+
+    /* developers get the truth; players do not */
+    if (!dom.dev.hidden) {
+      const pre = document.createElement('pre');
+      pre.className = 'stage-failed-trace';
+      pre.textContent = (err && (err.stack || err.message)) || String(err);
+      box.appendChild(pre);
+    }
+    dom.stage.appendChild(box);
+  },
+
+  /* The softer one: the stage is still standing, so offer an exit without
+     taking anything away. Only ever shown once per stage. */
+  offerRecovery() {
+    if (this.recoveryShown || document.querySelector('.recovery-bar')) return;
+    this.recoveryShown = true;
+
+    const bar = document.createElement('div');
+    bar.className = 'recovery-bar';
+    bar.setAttribute('role', 'status');
+
+    const msg = document.createElement('span');
+    msg.textContent = t({ en: 'Something went wrong here.',
+                          ar: 'حدث خطأ ما هنا.' });
+    bar.appendChild(msg);
+
+    const again = document.createElement('button');
+    again.className = 'btn btn-sm';
+    again.type = 'button';
+    again.textContent = t({ en: 'Restart stage', ar: 'أعد المرحلة' });
+    again.addEventListener('click', () => { bar.remove(); this.load(this.index); });
+    bar.appendChild(again);
+
+    const hide = document.createElement('button');
+    hide.className = 'btn btn-sm btn-quiet';
+    hide.type = 'button';
+    hide.textContent = t({ en: 'Dismiss', ar: 'إخفاء' });
+    hide.addEventListener('click', () => bar.remove());
+    bar.appendChild(hide);
+
+    document.body.appendChild(bar);
+  },
+
   /* -------------------------------------------------------------- boot -- */
   start() {
     dom.levelTotal.textContent = String(LEVELS.length);
@@ -1305,7 +1406,7 @@ const engine = {
     if (params.get('dev') === '1') this.toggleDev(true);
 
     /* ?level=N means canonical level N, not the Nth thing played. The route
-       puts level 35 at play position 37, and every test and dev link in the
+       puts level 35 at play position 53, and every test and dev link in the
        project refers to levels by their real number. */
     const jump = parseInt(params.get('level'), 10);
     const indexOfLevel = n => {
@@ -1335,8 +1436,10 @@ this.load(first);
 
     this.solvedNow = false;
     this.hintStep = 0;
+    this.recoveryShown = false;
+    this.frameErrors = 0;
     this.levelStarted = Date.now();
-    State.currentLevel = level.id;
+    State.currentLevel = keyOf(level);
     dom.btnHint.disabled = !this.hintsOf(level).length;
     dom.solved.classList.remove('is-on');
     dom.stage.className = 'stage';
@@ -1368,7 +1471,8 @@ this.load(first);
     // one frame of settle so measurements are correct before setup runs
     requestAnimationFrame(() => {
       if (this.ctx !== ctx) return;
-      try { level.setup(ctx); } catch (e) { console.error('level ' + level.id + ' setup', e); }
+      try { level.setup(ctx); }
+      catch (e) { this.stageFailed(e); }
     });
   },
 
@@ -1380,8 +1484,9 @@ this.load(first);
   restart() {
     const level = LEVELS[this.index];
     State.bump('restarts');
-    State.note(level.id, { restarts: (State.row(level.id).restarts || 0) + 1 });
-    State.record('restart', { id: level.id });
+    const rkey = keyOf(level);
+    State.note(rkey, { restarts: (State.row(rkey).restarts || 0) + 1 });
+    State.record('restart', { id: rkey });
     this.load(this.index);
   },
 
@@ -1443,14 +1548,19 @@ this.load(first);
       this.lastT = t;
       const ctx = this.ctx;
       if (!ctx || this.solvedNow) return;
+      let threw = false;
       for (let i = 0; i < ctx._frames.length; i++) {
-        try { ctx._frames[i](dt); } catch (e) { console.error(e); }
+        try { ctx._frames[i](dt); } catch (e) { threw = true; console.error(e); }
       }
       for (let i = 0; i < ctx._checks.length; i++) {
         let ok = false;
-        try { ok = ctx._checks[i](); } catch (e) { console.error(e); }
+        try { ok = ctx._checks[i](); } catch (e) { threw = true; console.error(e); }
         if (ok) { this.solve(); break; }
       }
+      /* one bad frame is noise; sixty in a row means the stage is broken and
+         the player is sitting in front of something that cannot be finished */
+      this.frameErrors = threw ? this.frameErrors + 1 : 0;
+      if (this.frameErrors > 60) { this.frameErrors = 0; this.offerRecovery(); }
     };
     this.rafId = requestAnimationFrame(tick);
   },
@@ -1535,7 +1645,7 @@ this.load(first);
     dom.btnHint.disabled = this.hintStep >= hints.length;
 
     State.bump('hints');
-    State.note(level.id, { hints: this.hintStep });
+    State.note(keyOf(level), { hints: this.hintStep });
     State.record('hint', { stage: this.hintStep });
   },
 
@@ -1767,7 +1877,7 @@ this.load(first);
     LEVELS.forEach((lv, i) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = String(lv.id).padStart(2, '0');
+      b.textContent = lv.id != null ? String(lv.id).padStart(2, '0') : lv.routeId;
       b.title = t(lv.name);
       b.addEventListener('click', () => { clearTimeout(this.autoNext); this.load(i); });
       dom.devGrid.appendChild(b);
@@ -1776,7 +1886,7 @@ this.load(first);
 
   paintDev() {
     [...dom.devGrid.children].forEach((b, i) => {
-      b.classList.toggle('is-solved', save.solved.includes(LEVELS[i].id));
+      b.classList.toggle('is-solved', save.solved.includes(keyOf(LEVELS[i])));
       b.classList.toggle('is-current', i === this.index);
     });
   },
@@ -1800,7 +1910,7 @@ this.load(first);
       clearTimeout(this.autoNext);
       const level = LEVELS[this.index];
       State.bump('skips');
-      State.record('skip', { id: level.id });
+      State.record('skip', { id: keyOf(level) });
 
       if (this.index < LEVELS.length - 1) {
         save.unlocked = Math.max(save.unlocked, Math.min(this.index + 2, LEVELS.length));
@@ -1867,10 +1977,59 @@ this.load(first);
 
 window.RULESET = engine;   // handy for the console / dev mode
 
+/* ---------------------------------------------------------------- safety --
+   Errors thrown from a timer or a listener never pass through the engine's
+   own try/catch, so they would otherwise vanish into the console and leave a
+   stage quietly half-alive. Catch them globally and offer a way out.
+
+   Deliberately a nudge, not a takeover: an error here does not prove the
+   stage is unplayable, and wiping a puzzle a player is halfway through would
+   be the worse failure. Repeats are folded into one bar per stage. */
+window.addEventListener('error', e => {
+  if (engine && engine.offerRecovery) engine.offerRecovery();
+});
+window.addEventListener('unhandledrejection', e => {
+  if (engine && engine.offerRecovery) engine.offerRecovery();
+});
+
+/* If boot itself dies the page is blank and there is no engine to ask, so
+   this one writes its own way out. */
+function boot() {
+  try { engine.start(); }
+  catch (e) {
+    console.error('boot', e);
+    const app = document.querySelector('.app') || document.body;
+    const box = document.createElement('div');
+    box.className = 'stage-failed';
+    box.setAttribute('role', 'alert');
+    box.innerHTML = '<p class="stage-failed-head"></p><p class="stage-failed-sub"></p>';
+    box.firstChild.textContent = 'RULESET did not start.';
+    box.lastChild.textContent = 'Reload the page. If it keeps happening, your saved progress may be damaged — you can clear it below.';
+    const row = document.createElement('div');
+    row.className = 'stage-failed-actions';
+    const reload = document.createElement('button');
+    reload.className = 'btn btn-primary';
+    reload.type = 'button';
+    reload.textContent = 'Reload';
+    reload.addEventListener('click', () => location.reload());
+    const wipe = document.createElement('button');
+    wipe.className = 'btn';
+    wipe.type = 'button';
+    wipe.textContent = 'Clear saved progress';
+    wipe.addEventListener('click', () => {
+      try { localStorage.removeItem('ruleset:v1'); } catch (err) {}
+      location.reload();
+    });
+    row.appendChild(reload); row.appendChild(wipe);
+    box.appendChild(row);
+    app.appendChild(box);
+  }
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => engine.start());
+  document.addEventListener('DOMContentLoaded', boot);
 } else {
-  engine.start();
+  boot();
 }
 
 })();

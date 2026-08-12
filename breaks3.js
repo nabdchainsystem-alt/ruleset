@@ -20,7 +20,10 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
 
   hint: { en: 'You do not need four fingers.', ar: 'لست بحاجة إلى أربعة أصابع.' },
   hint2: { en: 'One object can touch several things.', ar: 'شيء واحد يمكنه ملامسة عدة أشياء.' },
-  hint3: { en: 'Use the plate.', ar: 'استخدم اللوح.' },
+  hint3: {
+    en: 'Lay the plate over all four pads at once.',
+    ar: 'ضع اللوح فوق الأربعة معًا.'
+  },
   note: { en: 'One thing can be in four places.', ar: 'شيء واحد يكون في أربعة أماكن.' },
 
   setup(ctx) {
@@ -280,7 +283,10 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
 
   hint: { en: 'You cannot control the falling object.', ar: 'لا يمكنك التحكم بالشيء الساقط.' },
   hint2: { en: 'What can meet it?', ar: 'ما الذي يمكنه ملاقاته؟' },
-  hint3: { en: 'Move the ground.', ar: 'حرّك الأرض.' },
+  hint3: {
+    en: 'Drag the ground upward — catching it down in the dark does not count.',
+    ar: 'اسحب الأرض إلى أعلى — والتقاطه في العتمة لا يُحتسب.'
+  },
   note: { en: 'Move the ground, not the thing.', ar: 'حرّك الأرض لا الشيء.' },
 
   setup(ctx) {
@@ -445,7 +451,10 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
 
   hint: { en: 'You only control the first event.', ar: 'أنت تتحكم بالحدث الأول فقط.' },
   hint2: { en: 'Objects can move other objects.', ar: 'الأشياء تحرّك أشياء أخرى.' },
-  hint3: { en: 'Push the first one into the second.', ar: 'ادفع الأول نحو الثاني.' },
+  hint3: {
+    en: 'Drag the first piece until it touches the next one, then let go.',
+    ar: 'اسحب القطعة الأولى حتى تلامس التالية، ثم أفلتها.'
+  },
   note: { en: 'One push, many movements.', ar: 'دفعة واحدة، حركات كثيرة.' },
 
   setup(ctx) {
@@ -617,7 +626,10 @@ window.RULESET_BREAKS = (window.RULESET_BREAKS || []).concat([
 
   hint: { en: 'One object can reach four places.', ar: 'شيء واحد يبلغ أربعة مواضع.' },
   hint2: { en: 'Look at how the points are arranged.', ar: 'انظر إلى ترتيب النقاط.' },
-  hint3: { en: 'Grow the frame until its corners are theirs.', ar: 'كبّر الإطار حتى تصير زواياه زواياها.' },
+  hint3: {
+    en: 'Grow the frame, then lay its four corners on the four points.',
+    ar: 'كبّر الإطار، ثم ضع زواياه الأربع على النقاط الأربع.'
+  },
   note: { en: 'A rectangle is four places at once.', ar: 'المستطيل أربعة مواضع في آن.' },
 
   setup(ctx) {

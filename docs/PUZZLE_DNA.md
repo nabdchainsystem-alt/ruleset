@@ -1,5 +1,21 @@
 # PUZZLE DNA — audit of levels 1–15
 
+> **Scope: Season I only.** This is a historical design audit of levels 1–15,
+> written before the capability refactor and before Season II or the Break
+> puzzles existed. It is preserved as-is because its findings are still the
+> reasoning behind the current architecture — it is **not** a description of the
+> shipped 75-stage game.
+>
+> Two things in it were recommendations at the time and were **not** acted on,
+> and are still true of the shipping build:
+>
+> - **Level 15's third latch is still level 10's trick.** The "replace latch 3
+>   with a different chrome element" recommendation in cross-cutting finding 2
+>   was not implemented. Both levels declare `globalElementsAllowed: ['progress']`.
+> - **Level 14 was not cut or rebuilt.** It ships as described here.
+>
+> Where this document says "the set" or "the fifteen", it means Season I.
+
 Written before the capability refactor, so it describes what exists rather than
 what we wish existed. Scores are 1–10 and deliberately unflattering: an audit
 that says everything is an 8 is worth nothing.

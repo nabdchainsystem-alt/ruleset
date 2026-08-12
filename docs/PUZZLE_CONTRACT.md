@@ -1,5 +1,10 @@
 # THE PUZZLE CONTRACT
 
+> **Status: verified against the shipped code.** Rule 3 carries two documented
+> exceptions (see below); rule 5's known violation is still present. Everything
+> else describes the build as it stands. The contract applies to **all 75
+> stages** — Season I, ECHO and the Break puzzles alike.
+
 Fifteen rules. They are not aspirations — a level that breaks one does not
 ship. Each rule below is written as a test you can actually run against a
 draft, because a rule you cannot check is a rule you will violate by accident.
@@ -52,6 +57,21 @@ varies run to run, it is a slot machine.
 Timing that the player controls is not randomness. Timing they cannot predict
 is.
 
+> **Two shipped exceptions, both in *presentation* rather than logic.** A grep
+> for `Math.random` across `levels.js` and the four `breaks*.js` files returns
+> exactly two hits, and no Break puzzle uses randomness at all:
+>
+> - **Level 40** randomises which of the two messages — the intact one and the
+>   corrupted one — is drawn on the left. Both are always present and the task
+>   (find the one whose checksum does not close) is identical either way.
+> - **Level 45** shuffles the eight lock tiles in the tray. The required answer,
+>   `VE NA OR SE KA MI RU LI`, is fixed.
+>
+> Neither changes what the player must reason about, and neither varies
+> difficulty. They are recorded here so the exception is a decision rather than
+> a drift; the rule's *intent* — no level is easier on one run than another —
+> holds. Flagged in `RELEASE_AUDIT.md` for a final call.
+
 ---
 
 ## 4. Never require obscure browser knowledge the game has not taught
@@ -75,7 +95,14 @@ common knowledge but "zoom changes the CSS viewport width" is not.
 level N because ___". If the only difference is the noun, it is a repeat.
 
 The known violation is documented in `PUZZLE_DNA.md`: level 15's third latch is
-level 10's trick with nothing added. Do not add a fourth.
+level 10's trick with nothing added. **It was never fixed and still ships** —
+both levels declare `globalElementsAllowed: ['progress']`. Do not add a third.
+
+The Break puzzles have one soft case of their own: B03 and B23 are the same
+insight ("inside is a relationship"). This is deliberate — B23 restates it as an
+explicit prohibition twenty stages later, and the two are far enough apart that
+the second reads as a callback rather than a repeat. B18 is a third variation on
+the same family, using the pointer itself as the object.
 
 ---
 

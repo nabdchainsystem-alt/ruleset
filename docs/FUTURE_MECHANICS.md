@@ -1,5 +1,29 @@
 # FUTURE MECHANICS
 
+> ## ⚠ THIS IS A WISH LIST, NOT SHIPPED BEHAVIOUR
+>
+> **Nothing in the forty numbered entries below describes a level that exists.**
+> This document is a brainstorm of candidate mechanics, kept so that ideas are
+> rejected on purpose rather than rediscovered by accident. Do not read it as a
+> description of the game, a roadmap, or a commitment.
+>
+> For what actually ships, read `README.md`, `BREAK_LEVELS.md` and `ECHO_SPEC.md`.
+>
+> **What has since become real.** The *engine capabilities* several of these
+> entries depend on were built during Season II and now exist on `ctx`:
+> `rotate`, `letters`, `reorder`, `editable`, `scalable`, `duplicable`,
+> `combine`, `escapable`, plus the declared-chrome system (`ctx.claim()` +
+> `globalElementsAllowed`) and the persistent store (`give`/`take`/`route`/
+> `remember`). A capability existing is **not** the same as a mechanic having
+> shipped as a designed level, and this table has not been re-scored against
+> them. Where a "Prerequisite" names one of those verbs, assume it is now
+> available.
+>
+> Some entries have also been overtaken by Season II in spirit — #25 *The key*
+> is essentially what level 45 became, and #5 *Tether* and #6 *Shadow* are close
+> cousins of Break puzzles B11 and B04. They are left in place unedited; this is
+> a record of thinking, not a changelog.
+
 Forty candidates. Not level designs — deliberately. Each is a *verb* the game
 could learn, with the assumption it attacks and the earlier lesson that makes
 it fair.

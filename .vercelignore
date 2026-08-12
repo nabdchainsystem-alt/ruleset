@@ -1,0 +1,34 @@
+# What the public build must NOT contain.
+#
+# Most of this is the usual dev clutter, but the first group matters for a
+# different reason: RULESET is a mystery, and these files are the answer key.
+# tests.html drives every puzzle to its solution, invariants.mjs prints the
+# hidden sentence, and docs/ECHO_SPEC.md explains the cipher end to end.
+# Shipping them would mean the first curious visitor could read the ending
+# before playing the beginning.
+
+tests.html
+sea-tests.html
+*-tests.mjs
+invariants.mjs
+docs/
+README.md
+output/
+
+# Local co-op only: server.mjs is a long-running Node process and live.js is
+# injected by it at serve time. Neither has any meaning on static hosting, and
+# the single-player game does not depend on them.
+server.mjs
+live.js
+
+# not needed to serve a static site, and their presence only invites a build
+package.json
+pnpm-lock.yaml
+node_modules/
+
+.git/
+.gitignore
+.impeccable/
+.DS_Store
+tmp/
+_probe.html

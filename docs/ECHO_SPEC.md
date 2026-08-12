@@ -1,5 +1,9 @@
 # ECHO — Season II specification
 
+> **Status: verified against `echo.js`, `echo-ui.js`, `state.js` and `levels.js`
+> as shipped.** The invariants in sections 1, 4, 5, 6 and 8 are additionally
+> asserted headlessly by `node invariants.mjs` (42 assertions).
+
 Season I taught the player *the interface can be manipulated*.
 Season II teaches *information itself can be manipulated*.
 
@@ -134,9 +138,18 @@ prefix, with the phase implied by the level number.
 
 - rendered by the engine, not by levels, into `#echoMark` in the bottom bar —
   so its position can never drift from level to level
+- pinned `dir="ltr"`: a mark is an ordered `[row, column]` pair, not prose, and
+  RTL would reverse the two tokens
 - inert: no listeners, no focus, not a button
 - noticeable through *repetition*, never through pixel hunting
-- banked into Echo Memory automatically on completion
+- banked into Echo Memory automatically **on solve**. **Skip does not bank it** —
+  the mark is the reward for finishing. Coming back and solving fills the gap,
+  because `remember()` is idempotent.
+
+**Break stages carry no mark and have no canonical id.** They are interleaved
+between ECHO levels by `route.js` and take no part in phase arithmetic; level
+35's phase is 3 because it is level 35, even though it is the 53rd of 75 stages
+played. See `BREAK_LEVELS.md`.
 
 `encodeEchoMark(char, levelId)` / `decodeEchoMark(tokens, levelId)`.
 
@@ -152,8 +165,12 @@ production surface. The Lab decodes marks; production does not.
 
 ## 9. Echo Memory
 
-`state.js` holds `echoMemory: [{ levelId, tokens, phase, at }]`, schema v3,
-migrating forward from any v1 or v2 save.
+`state.js` holds `echoMemory: [{ levelId, tokens, phase, at }]` under the
+localStorage key `ruleset:v1`, at **schema version 4**, migrating forward from
+any earlier save. `migrate()` trusts nothing: the v1 fields (`unlocked`,
+`solved`, `theme`, `lang`) stay at the top level because `live.js` and several
+ECHO systems read them directly, and malformed rows are dropped rather than
+thrown on.
 
 **Encoded tokens only.** The decoded character is never stored, so reading a
 mark always costs the player the same act of decoding — whether they do it on
@@ -168,19 +185,27 @@ that would require external note-taking is a design failure.
 
 ## 10. Level metadata
 
+The fields actually present on a Season II level object:
+
 ```js
 {
-  id, day,
-  title / instruction / hints,     // as Season I
-  introducedToken,                 // 'MI'
-  mechanicsRequired,               // ['dragText', …]
-  cipherCapabilitiesRequired,      // ['phase', 'checksum', …]
+  id,                              // 16…45, canonical. Feeds phase and marks.
+  day,                             // 1…30, the in-fiction day number
+  name,                            // { en, ar }
+  instruction,                     // string or { en, ar }
+  hint, hint2, hint3, note,        // as Season I
+  introducedToken,                 // 'MI'      (only on the level that adds one)
+  mechanicIntroduced,              // 'echoToken'
+  mechanicsRequired,               // ['dragObject', …]
+  cipherCapabilitiesRequired,      // ['phase', 'grid', 'ring', …]
+  globalElementsAllowed,           // ['progress'] — required before ctx.claim()
   echoMarkChar,                    // one grid character — never displayed
-  setup, validate, cleanup
+  setup, cleanup
 }
 ```
 
-`setup(ctx)` remains the escape hatch and remains first-class. Metadata
+There is **no `validate` hook**; a level validates through `ctx.check()` inside
+`setup`. `setup(ctx)` remains the escape hatch and remains first-class. Metadata
 describes a level; it does not constrain it.
 
 ## 11. Fairness
@@ -218,10 +243,34 @@ E.readPhrase(tokens)                 E.phraseMatches(tokens, want)
 `decodeText` never throws — a malformed message is a puzzle state, not a crash,
 so a level can show the player *why* it will not read.
 
-Interface pieces in `RULESET_ECHO_UI`: `ring()`, `grid()`, `strip()`. Each
-returns an object with `destroy()`; hand it to `ctx.own()`.
+Interface pieces in `RULESET_ECHO_UI`: `ring()`, `grid()`, `strip()`,
+`tether()` and `wall()` — the last is the Memory Wall the finale is built on.
+Each returns an object with `destroy()`; hand it to `ctx.own()`.
 
-## 13. Developer tools
+## 13. The finale, level 45
+
+Three acts, and no new mechanic in any of them.
+
+1. **Sort.** The 29 banked marks are shown out of order on the Memory Wall. The
+   player drags them; once the first three are in true level order a
+   `CONTINUE THE ORDER` button appears and finishes the job. Sorting 29 tiles by
+   hand is labour, not understanding.
+2. **Normalise.** `NORMALISE` reveals one character at a time by normalising its
+   pair against `levelPhase(levelId)`. After four, `NORMALISE ALL` appears and
+   runs the rest. The line spells `YOU BUILT THE KEY. USE IT NOW`.
+3. **The lock.** Eight shuffled tiles must be placed in the order
+   `VE NA OR SE KA MI RU LI`. The comparison is written against `E.TOKENS`
+   itself, so the lock can never drift apart from the language —
+   `invariants.mjs` asserts that the source still reads
+   `placed.join(' ') !== E.TOKENS.join(' ')`.
+
+Level 45 carries **no** `echoMarkChar`: the message ends at 44.
+
+If fewer than 29 marks are banked the level says so (`n / 29`, "the wall is
+incomplete") instead of faking it. A `dev: fill memory` button appears **only
+when the dev panel is open**, so the finale is testable without being cheatable.
+
+## 14. Developer tools
 
 Puzzle Lab → **echo** tab: ring inspector, grid inspector, encode, decode,
 phase selector, checksum toggle, memory viewer, add/remove marks, decode a mark

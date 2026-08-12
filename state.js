@@ -27,6 +27,47 @@ const HISTORY_LIVE = 400;        // kept in memory this session
 const HISTORY_KEPT = 60;         // persisted across reloads
 const INVENTORY_MAX = 64;
 
+/* Ceilings. A save file is untrusted input — it can be hand-edited, corrupted
+   mid-write, or left behind by a build that no longer exists. Nothing read out
+   of it may be unbounded, because every one of these numbers is later divided
+   by, indexed with, or rendered. */
+const KEY_MAX = 32;              // longest plausible stage key ('B07' is 3)
+const SOLVED_MAX = 400;
+const LEDGER_MAX = 400;
+const MECHANICS_MAX = 200;
+const WORDS_MAX = 200;
+const MARKS_MAX = 64;
+const TRAY_MAX = 16;
+const TOKEN_MAX = 8;
+
+const cut = (s, n) => String(s == null ? '' : s).slice(0, n);
+const int = v => (Number.isFinite(v) ? Math.trunc(v) : null);
+
+/* ---------------------------------------------------------- stage keys ---
+   A stage is saved under a NUMBER (Season I / ECHO, `stage.id`) or a STRING
+   routeId (a Break, 'B07'). Both types are legal and neither may be coerced
+   into the other: filtering `solved` down to numbers is exactly the bug that
+   silently erased every Break a player had finished, on every single reload.
+
+   The one coercion that IS safe is the reverse: no routeId is numeric, so a
+   key of "16" can only ever have been level 16 written as a string. Folding it
+   back to a number keeps `solved.includes(16)` true and stops the same stage
+   being banked twice under two spellings. */
+function stageKey(v) {
+  if (typeof v === 'number') {
+    const n = int(v);
+    return n != null && n > 0 ? n : null;      // no stage is numbered 0 or less
+  }
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s || s.length > KEY_MAX) return null;
+  /* a stage whose key stringified an absent one — never a real routeId, and
+     the shape a `keyOf(breakStage)` bug leaves behind */
+  if (s === 'undefined' || s === 'null' || s === 'NaN') return null;
+  if (/^-?\d+$/.test(s)) { const n = parseInt(s, 10); return n > 0 ? n : null; }
+  return s;
+}
+
 /* ------------------------------------------------------------- shape ----- */
 
 function blank() {
@@ -61,41 +102,135 @@ function blank() {
   };
 }
 
+const isPlainObject = o => !!o && typeof o === 'object' && !Array.isArray(o);
+
 /* Merge an unknown save over a blank one, field by field, trusting nothing.
-   A corrupt or partial save degrades to defaults rather than throwing. */
+   A corrupt or partial save degrades to defaults rather than throwing.
+
+   There is no version switch here on purpose. Every schema since v1 is a
+   superset of the one before, so reading each field independently migrates
+   v1, v2, v3 and v4 by the same code — and a v5 written by a build from the
+   future degrades to the fields this one understands instead of exploding. */
 function migrate(raw) {
   const d = blank();
-  if (!raw || typeof raw !== 'object') return d;
+  if (!isPlainObject(raw)) return d;
 
   // v1 fields — the only ones a legacy save is guaranteed to have
-  if (Number.isFinite(raw.unlocked)) d.unlocked = Math.max(1, raw.unlocked | 0);
-  /* Solved keys were all numbers until Break levels arrived; those save under a
-     routeId string ('B01'). Filtering to numbers here silently erased every
-     Break the player finished, on every reload. */
+  const unlocked = int(raw.unlocked);
+  if (unlocked != null) d.unlocked = Math.min(9999, Math.max(1, unlocked));
+
   if (Array.isArray(raw.solved)) {
-    d.solved = raw.solved.filter(v => Number.isFinite(v) || (typeof v === 'string' && v !== ''));
+    /* Deduplicated as well as validated: `solved.length` is the progress bar's
+       numerator and the completion count the finale prints, so one repeated
+       key reads as more of the game finished than exists. */
+    const seen = new Set();
+    for (let i = 0; i < raw.solved.length && d.solved.length < SOLVED_MAX; i++) {
+      const k = stageKey(raw.solved[i]);
+      if (k == null || seen.has(k)) continue;
+      seen.add(k);
+      d.solved.push(k);
+    }
   }
-  if (typeof raw.theme === 'string') d.theme = raw.theme;
-  if (typeof raw.lang === 'string') d.lang = raw.lang;
+  if (typeof raw.theme === 'string') d.theme = cut(raw.theme, 16);
+  if (typeof raw.lang === 'string') d.lang = cut(raw.lang, 8) || 'en';
 
   // v2 fields — absent on a legacy save, which is fine
-  if (Array.isArray(raw.mechanics)) d.mechanics = raw.mechanics.filter(s => typeof s === 'string');
-  if (Array.isArray(raw.inventory)) d.inventory = raw.inventory.filter(it => it && typeof it.id === 'string');
-  if (Array.isArray(raw.words)) d.words = raw.words.filter(s => typeof s === 'string');
-  if (raw.ledger && typeof raw.ledger === 'object') d.ledger = raw.ledger;
-  if (raw.counts && typeof raw.counts === 'object') Object.assign(d.counts, raw.counts);
-  if (Array.isArray(raw.history)) d.history = raw.history.slice(-HISTORY_KEPT);
+  if (Array.isArray(raw.mechanics)) {
+    const seen = new Set();
+    d.mechanics = raw.mechanics
+      .filter(s => typeof s === 'string' && s && s.length <= 64 && !seen.has(s) && seen.add(s))
+      .slice(0, MECHANICS_MAX);
+  }
+  if (Array.isArray(raw.inventory)) {
+    d.inventory = raw.inventory
+      .filter(it => isPlainObject(it) && typeof it.id === 'string' && it.id)
+      .map(it => ({
+        id: cut(it.id, 64),
+        from: it.from == null ? null : it.from,
+        at: Number.isFinite(it.at) ? it.at : Date.now(),
+        data: it.data
+      }))
+      .slice(0, INVENTORY_MAX);
+  }
+  if (Array.isArray(raw.words)) {
+    d.words = raw.words.filter(s => typeof s === 'string' && s).map(s => cut(s, 64)).slice(0, WORDS_MAX);
+  }
+
+  /* The ledger is keyed by the same dual-type stage key, so it arrives as an
+     object with both numeric-looking and routeId keys. An array passes a bare
+     `typeof === 'object'` test and then serialises back as an array, dropping
+     every row: check the shape, not the type. */
+  if (isPlainObject(raw.ledger)) {
+    Object.keys(raw.ledger).slice(0, LEDGER_MAX).forEach(k => {
+      const r = raw.ledger[k];
+      if (!isPlainObject(r) || stageKey(k) == null) return;
+      const row = {
+        route: typeof r.route === 'string' ? cut(r.route, 64) : null,
+        answer: typeof r.answer === 'string' ? cut(r.answer, 240) : null,
+        hints: Math.max(0, int(r.hints) || 0),
+        restarts: Math.max(0, int(r.restarts) || 0),
+        ms: Math.max(0, int(r.ms) || 0),
+        at: Number.isFinite(r.at) ? r.at : null
+      };
+      /* carry anything a later level parked here, as long as it is a scalar */
+      Object.keys(r).slice(0, 16).forEach(f => {
+        if (f in row) return;
+        const v = r[f];
+        if (typeof v === 'number' || typeof v === 'boolean') row[f] = v;
+        else if (typeof v === 'string') row[f] = cut(v, 240);
+      });
+      d.ledger[k] = row;
+    });
+  }
+
+  /* Counters are added to with `+=`, so one string counter turns every later
+     bump into concatenation ("many" + 1 = "many1") and the number is gone. */
+  if (isPlainObject(raw.counts)) {
+    Object.keys(raw.counts).forEach(k => {
+      if (/^[A-Za-z][A-Za-z0-9_]*$/.test(k) && Number.isFinite(raw.counts[k])) {
+        d.counts[k] = raw.counts[k];
+      }
+    });
+  }
+
+  /* history() and didEver() read `e.type` off every entry without looking
+     first, so a single null in here is a TypeError on a level that asks what
+     the player has done before. */
+  if (Array.isArray(raw.history)) {
+    d.history = raw.history
+      .filter(e => isPlainObject(e) && typeof e.type === 'string')
+      .slice(-HISTORY_KEPT);
+  }
 
   // v4 fields
   if (Array.isArray(raw.echoTray)) {
-    d.echoTray = raw.echoTray.filter(t => typeof t === 'string').slice(0, 16);
+    d.echoTray = raw.echoTray
+      .filter(t => typeof t === 'string' && t.trim() && t.trim().length <= TOKEN_MAX)
+      .map(t => t.trim().toUpperCase())
+      .slice(0, TRAY_MAX);
   }
   if (raw.season2Complete === true) d.season2Complete = true;
 
   // v3 fields — absent on a v1/v2 save, which is fine
   if (Array.isArray(raw.echoMemory)) {
-    d.echoMemory = raw.echoMemory.filter(m =>
-      m && Number.isFinite(m.levelId) && Array.isArray(m.tokens) && m.tokens.length === 2);
+    /* One mark per level, in level order. The finale counts these to decide
+       whether the wall can be read (`held.length < 29`), so a duplicate is a
+       season that reads as complete while a character is missing, and an
+       unsorted memory is the message spelled out in the wrong order. */
+    const seen = new Set();
+    d.echoMemory = raw.echoMemory
+      .filter(m => isPlainObject(m) && Number.isFinite(m.levelId) &&
+        Array.isArray(m.tokens) && m.tokens.length === 2 &&
+        m.tokens.every(t => typeof t === 'string' && t && t.length <= TOKEN_MAX))
+      .map(m => ({
+        levelId: Math.trunc(m.levelId),
+        tokens: [m.tokens[0], m.tokens[1]],
+        phase: Math.max(0, int(m.phase) || 0),
+        at: Number.isFinite(m.at) ? m.at : Date.now()
+      }))
+      .filter(m => !seen.has(m.levelId) && seen.add(m.levelId))
+      .sort((a, b) => a.levelId - b.levelId)
+      .slice(0, MARKS_MAX);
   }
 
   d.v = SCHEMA;
@@ -230,8 +365,8 @@ const State = {
      level may want the literal text the player took. */
 
   keepWord(word, from) {
-    const w = String(word || '').trim();
-    if (!w || data.words.indexOf(w) >= 0) return false;
+    const w = cut(word, 64).trim();
+    if (!w || data.words.length >= WORDS_MAX || data.words.indexOf(w) >= 0) return false;
     data.words.push(w);
     this.record('keepWord', { word: w, from });
     save(); emit();
@@ -244,14 +379,25 @@ const State = {
      One row per level the player has engaged with. `route` is how they solved
      it, which matters for levels with more than one valid answer. */
 
+  /* A stage with no key gets a throwaway row rather than a shared one. The
+     engine calls this with `level.id`, which is undefined for every Break —
+     writing those into `ledger.undefined` merges thirty puzzles into one row
+     and loses the route each of them recorded. Callers see a live object
+     either way, so nothing has to check. */
   row(levelId) {
-    return data.ledger[levelId] ||
-      (data.ledger[levelId] = { route: null, answer: null, hints: 0, restarts: 0, ms: 0, at: null });
+    const k = stageKey(levelId);
+    if (k == null) return { route: null, answer: null, hints: 0, restarts: 0, ms: 0, at: null };
+    return data.ledger[k] ||
+      (data.ledger[k] = { route: null, answer: null, hints: 0, restarts: 0, ms: 0, at: null });
   },
   note(levelId, patch) { Object.assign(this.row(levelId), patch); save(); emit(); },
-  routeOf(levelId) { return (data.ledger[levelId] || {}).route || null; },
-  answerOf(levelId) { return (data.ledger[levelId] || {}).answer || null; },
-  hintsOn(levelId) { return (data.ledger[levelId] || {}).hints || 0; },
+  rowOf(levelId) {
+    const k = stageKey(levelId);
+    return (k != null && data.ledger[k]) || null;
+  },
+  routeOf(levelId) { return (this.rowOf(levelId) || {}).route || null; },
+  answerOf(levelId) { return (this.rowOf(levelId) || {}).answer || null; },
+  hintsOn(levelId) { return (this.rowOf(levelId) || {}).hints || 0; },
 
   /* -- counters ----------------------------------------------------------- */
 
@@ -342,12 +488,16 @@ const State = {
   /** Record a level's mark. Idempotent: replaying a level cannot duplicate it. */
   remember(levelId, tokens, phase) {
     if (!Array.isArray(tokens) || tokens.length !== 2) return null;
-    const id = levelId | 0;
+    /* `levelId | 0` turned a Break's routeId into level 0 and filed a mark
+       against a stage that has none. Only a real canonical id may be a mark. */
+    const id = int(levelId);
+    if (id == null || id <= 0) return null;
     const existing = data.echoMemory.find(m => m.levelId === id);
+    if (!existing && data.echoMemory.length >= MARKS_MAX) return null;
     const entry = {
       levelId: id,
-      tokens: [String(tokens[0]), String(tokens[1])],
-      phase: phase | 0,
+      tokens: [cut(tokens[0], TOKEN_MAX), cut(tokens[1], TOKEN_MAX)],
+      phase: Math.max(0, int(phase) || 0),
       at: Date.now()
     };
     if (existing) Object.assign(existing, entry);
@@ -361,14 +511,14 @@ const State = {
   marks() { return data.echoMemory.map(m => Object.assign({}, m)); },
 
   markFor(levelId) {
-    const m = data.echoMemory.find(x => x.levelId === (levelId | 0));
+    const m = data.echoMemory.find(x => x.levelId === int(levelId));
     return m ? Object.assign({}, m) : null;
   },
 
-  hasMark(levelId) { return !!data.echoMemory.find(x => x.levelId === (levelId | 0)); },
+  hasMark(levelId) { return !!data.echoMemory.find(x => x.levelId === int(levelId)); },
 
   forgetMark(levelId) {
-    const i = data.echoMemory.findIndex(x => x.levelId === (levelId | 0));
+    const i = data.echoMemory.findIndex(x => x.levelId === int(levelId));
     if (i < 0) return false;
     data.echoMemory.splice(i, 1);
     save(); emit();
@@ -381,11 +531,11 @@ const State = {
      that filled it, and nothing tells the player for how long. */
 
   tray() { return data.echoTray.slice(); },
-  trayHas(tok) { return data.echoTray.indexOf(String(tok).toUpperCase()) >= 0; },
+  trayHas(tok) { return data.echoTray.indexOf(cut(tok, TOKEN_MAX).trim().toUpperCase()) >= 0; },
 
   trayPush(tok) {
-    const t = String(tok).toUpperCase();
-    if (data.echoTray.length >= 16) return null;
+    const t = cut(tok, TOKEN_MAX).trim().toUpperCase();
+    if (!t || data.echoTray.length >= TRAY_MAX) return null;
     data.echoTray.push(t);
     save(); emit();
     return t;
@@ -393,7 +543,7 @@ const State = {
 
   /** Spend a token. Returns false if it was not being carried. */
   trayTake(tok) {
-    const i = data.echoTray.indexOf(String(tok).toUpperCase());
+    const i = data.echoTray.indexOf(cut(tok, TOKEN_MAX).trim().toUpperCase());
     if (i < 0) return false;
     data.echoTray.splice(i, 1);
     save(); emit();

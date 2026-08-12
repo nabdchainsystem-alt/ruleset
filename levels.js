@@ -328,6 +328,10 @@ window.RULESET_LEVELS = [
     en: 'The bar resets on any input at all — including the one you are making now.',
     ar: 'الشريط يُصفَّر مع أي إدخال — حتى الذي تفعله الآن.'
   },
+  hint3: {
+    en: 'Take your hands off the mouse and the keyboard, and let the bar fill.',
+    ar: 'ارفع يديك عن الفأرة ولوحة المفاتيح، ودع الشريط يمتلئ.'
+  },
   note: {
     en: 'Not acting is also an input.',
     ar: 'الامتناع عن الفعل إدخالٌ أيضًا.'
@@ -1063,8 +1067,17 @@ window.RULESET_LEVELS = [
       ctx.drag(t, {
         affordance: false,
         enabled: () => !t.dataset.home,
-        onMove: () => sockets.forEach(k =>
-          k.classList.toggle('is-hot', !k.dataset.full && ctx.hits(t, k, -6))),
+        onMove: () => {
+          /* A token lives in the world, not the stage, so `bounds` cannot hold
+             it: the world is deliberately larger than the view. Clamp to the
+             world instead — dragged past its edge a token would sit outside
+             every reachable pan, clipped by the stage and gone for good. */
+          const cx = Math.max(0, Math.min(WW - t.offsetWidth, parseFloat(t.style.left) || 0));
+          const cy = Math.max(0, Math.min(WH - t.offsetHeight, parseFloat(t.style.top) || 0));
+          ctx.place(t, cx, cy);
+          sockets.forEach(k =>
+            k.classList.toggle('is-hot', !k.dataset.full && ctx.hits(t, k, -6)));
+        },
         onDrop: () => {
           const k = sockets.find(k => !k.dataset.full && ctx.hits(t, k, -6));
           sockets.forEach(k => k.classList.remove('is-hot'));
@@ -3362,6 +3375,12 @@ window.RULESET_LEVELS = [
 
     let done = false, filled = false;
 
+    /* Spending SE here empties the tray for good, and the tray outlives the
+       level. Without this, placing the token and then pressing Restart left a
+       stage that could never be finished. A token that was genuinely earned on
+       day 21 is handed back; one that was never earned still is not. */
+    if (!tray.chip(NEED) && ctx.knows('echoCarry')) tray.give(NEED);
+
     /* No replacement is offered. If the token was never collected the level
        says so plainly rather than pretending to be solvable. */
     const chip = tray.chip(NEED);
@@ -3702,8 +3721,8 @@ window.RULESET_LEVELS = [
     ar: 'تحقق من الرمز الأخير في كل منها قبل أن تطيع أيًّا منها.'
   },
   hint3: {
-    en: 'The intact one asks for something you did once before, on a quiet day.',
-    ar: 'السليمة تطلب شيئًا فعلته من قبل، في يوم هادئ.'
+    en: 'Choose the intact one, then obey it — and obeying it means touching nothing at all.',
+    ar: 'اختر السليمة ثم أطعها — وطاعتها ألّا تلمس شيئًا على الإطلاق.'
   },
   note: 'WAIT',
 

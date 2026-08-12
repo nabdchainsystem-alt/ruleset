@@ -45,6 +45,39 @@ const cut = (s, n) => String(s == null ? '' : s).slice(0, n || 200);
 const KINDS = ['note', 'pin', 'rule'];
 const CONFIDENCE = ['question', 'likely', 'certain'];
 
+/* One table, read by BOTH the live editor and the loader. They used to carry
+   separate numbers, so a rule side longer than 80 characters was accepted by
+   the panel, shown back to the player, saved — and then quietly shortened on
+   the next reload. Silent truncation of a player's own writing is the one
+   failure a notebook cannot have. */
+const LIMITS = {
+  id: 32, title: 120, body: MAX_BODY, text: 240,
+  left: 80, rel: 12, right: 80,
+  stageKey: 24, stageName: 60, tag: 24
+};
+const TAGS_MAX = 8;
+
+/** The one place a field is coerced. Unknown keys, and id/kind, never land. */
+function assign(it, fields) {
+  Object.keys(fields || {}).forEach(k => {
+    const v = fields[k];
+    if (k === 'id' || k === 'kind') return;
+    if (k === 'tags') {
+      const list = Array.isArray(v) ? v : String(v == null ? '' : v).split(',');
+      it.tags = list.map(t => cut(t, LIMITS.tag).trim()).filter(Boolean).slice(0, TAGS_MAX);
+    } else if (k === 'confidence') {
+      if (CONFIDENCE.indexOf(v) >= 0) it.confidence = v;
+    } else if (k === 'at') {
+      if (Number.isFinite(v)) it.at = v;
+    } else if (k === 'stageKey') {
+      it.stageKey = v == null ? null : cut(v, LIMITS.stageKey);
+    } else if (Object.prototype.hasOwnProperty.call(LIMITS, k)) {
+      it[k] = cut(v, LIMITS[k]);
+    }
+  });
+  return it;
+}
+
 function blank() { return { v: SCHEMA, seen: false, items: [], links: [] }; }
 
 /** Trust nothing on the way in: a corrupt file degrades to empty, never throws. */
@@ -58,19 +91,19 @@ function migrate(raw) {
       .filter(it => it && typeof it === 'object' && typeof it.id === 'string' && KINDS.indexOf(it.kind) >= 0)
       .slice(0, MAX_ITEMS)
       .map(it => ({
-        id: cut(it.id, 32),
+        id: cut(it.id, LIMITS.id),
         kind: it.kind,
-        title: cut(it.title, 120),
-        body: cut(it.body, MAX_BODY),
-        text: cut(it.text, 240),
-        left: cut(it.left, 80),
-        rel: cut(it.rel, 12),
-        right: cut(it.right, 80),
+        title: cut(it.title, LIMITS.title),
+        body: cut(it.body, LIMITS.body),
+        text: cut(it.text, LIMITS.text),
+        left: cut(it.left, LIMITS.left),
+        rel: cut(it.rel, LIMITS.rel),
+        right: cut(it.right, LIMITS.right),
         confidence: CONFIDENCE.indexOf(it.confidence) >= 0 ? it.confidence : 'question',
-        stageKey: it.stageKey == null ? null : cut(it.stageKey, 24),
-        stageName: cut(it.stageName, 60),
+        stageKey: it.stageKey == null ? null : cut(it.stageKey, LIMITS.stageKey),
+        stageName: cut(it.stageName, LIMITS.stageName),
         tags: Array.isArray(it.tags)
-          ? it.tags.filter(t => typeof t === 'string').map(t => cut(t, 24)).slice(0, 8)
+          ? it.tags.filter(t => typeof t === 'string').map(t => cut(t, LIMITS.tag)).slice(0, TAGS_MAX)
           : [],
         at: Number.isFinite(it.at) ? it.at : Date.now()
       }));
@@ -218,18 +251,22 @@ const Vault = {
   item(id) { return data.items.find(i => i.id === id) || null; },
   links() { return data.links.slice(); },
 
+  /* `fields` is whatever a caller hands over — the dev panel, a test, a future
+     button. It goes through the same coercion the editor uses, so nothing can
+     put an item into the store in a shape the renderer cannot draw. */
   add(kind, fields) {
     if (KINDS.indexOf(kind) < 0 || data.items.length >= MAX_ITEMS) return null;
     const st = currentStage();
-    const it = Object.assign({
+    const it = {
       id: uid(), kind: kind,
       title: '', body: '', text: '',
       left: '', rel: '=', right: '',
       confidence: 'question',
       stageKey: st.key, stageName: st.name,
       tags: [], at: Date.now()
-    }, fields || {});
-    it.id = uid();
+    };
+    assign(it, fields);
+    it.id = uid();          // never the caller's: ids are the link graph
     it.kind = kind;
     data.items.unshift(it);
     save();
@@ -239,16 +276,7 @@ const Vault = {
   update(id, fields) {
     const it = this.item(id);
     if (!it) return null;
-    Object.keys(fields || {}).forEach(k => {
-      if (k === 'id' || k === 'kind') return;
-      if (k === 'tags') {
-        it.tags = String(fields.tags).split(',').map(t => cut(t.trim(), 24)).filter(Boolean).slice(0, 8);
-      } else if (k === 'confidence') {
-        if (CONFIDENCE.indexOf(fields[k]) >= 0) it.confidence = fields[k];
-      } else {
-        it[k] = cut(fields[k], k === 'body' ? MAX_BODY : 240);
-      }
-    });
+    assign(it, fields);
     save();
     return it;
   },
@@ -297,8 +325,17 @@ const Vault = {
     return true;
   },
 
-  clear() { data = blank(); saveNow(); },
-  saveNow: saveNow
+  /* Emptying the vault is not meeting it again: the one sentence it ever says
+     stays said. */
+  clear() { const seen = data.seen; data = blank(); data.seen = seen; saveNow(); },
+  saveNow: saveNow,
+
+  /* The panel, for the dev panel and for tests. `open()` with no argument
+     opens — it is not a toggle, and a bare open() that closed would be a trap. */
+  open() { open(true); },
+  close() { open(false); },
+  toggle() { open(!root || root.hidden); },
+  isOpen() { return !!root && !root.hidden; }
 };
 
 window.RULESET_VAULT = Vault;
@@ -425,6 +462,23 @@ function syncTabs() {
 }
 
 /* ------------------------------------------------------------- the icon - */
+
+/* The icon tracks the unlock in both directions. Mounting only was enough
+   until "Start over" — which empties `solved`, taking B03 with it. The Vault
+   went back to locked, `V` stopped working and the success card dropped its
+   line, but the icon stayed in the bottom bar and still opened a panel for a
+   season the player had not reached yet. */
+function syncIcon() {
+  if (unlocked()) { mountIcon(); if (icon) icon.title = T('vault'); }
+  else unmountIcon();
+}
+
+function unmountIcon() {
+  if (!icon) return;
+  icon.remove();
+  icon = null;
+  if (root && !root.hidden) open(false);
+}
 
 function mountIcon() {
   if (icon || !unlocked()) return;
@@ -802,19 +856,15 @@ function watchSolved() {
 function boot() {
   if (!window.RULESET_STATE) return;
 
-  mountIcon();
+  syncIcon();
   watchSolved();
 
-  /* the icon appears the moment B03 is banked, and never before */
-  window.RULESET_STATE.onChange(() => {
-    mountIcon();
-    if (icon) icon.title = T('vault');
-  });
+  /* the icon appears the moment B03 is banked, never before, and goes away
+     again if progress is wiped */
+  window.RULESET_STATE.onChange(syncIcon);
 
-  /* language can change under us; the panel is rebuilt rather than patched */
-  setInterval(() => {
-    if (!icon) mountIcon();
-  }, 1000);
+  /* the bottom bar is rebuilt by other things; keep checking cheaply */
+  setInterval(syncIcon, 1000);
 
   window.addEventListener('keydown', e => {
     if (!unlocked()) return;
