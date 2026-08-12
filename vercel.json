@@ -1,5 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "//": "RULESET is a folder of static files with no build step. These three keys say that explicitly rather than leaving Vercel to infer it — a deploy that inferred wrong served `404 — not in /var/task`, which is the serverless runtime answering for a project that has no functions at all.",
+  "framework": null,
+  "buildCommand": null,
+  "installCommand": null,
+  "outputDirectory": ".",
+
+  "//rewrites": "The landing page is the front door; index.html stays exactly where it is so every test, every relative link and `open index.html` off the disk keep working. Only the bare root is rewritten — nothing else, so the 404s that hide the answer key still 404.",
+  "rewrites": [
+    { "source": "/", "destination": "/home.html" },
+    { "source": "/play", "destination": "/index.html" }
+  ],
+
   "headers": [
     {
       "source": "/(.*)",
@@ -14,7 +27,7 @@
       ]
     },
     {
-      "source": "/(.*)\\.(js|css)",
+      "source": "/(.*)\\.(js|css|svg)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]

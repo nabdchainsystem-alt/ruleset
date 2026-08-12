@@ -23,6 +23,8 @@
 <link rel="stylesheet" href="breaks4.css">
 <link rel="stylesheet" href="vault.css">
 <link rel="stylesheet" href="recovery.css">
+<!-- last on purpose: it re-declares the .solved block from styles.css -->
+<link rel="stylesheet" href="solved.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23111214'/><rect x='8' y='14.5' width='16' height='3' rx='1.5' fill='%23fff'/></svg>">
 </head>
 <body>
@@ -73,12 +75,24 @@
     <!-- free layer: anything dragged out of normal flow lives here -->
     <div class="loose" id="loose"></div>
 
-    <!-- success -->
+    <!-- success. It reads BELOW the board and never covers it: the solved
+         puzzle is the thing the player should be looking at. Where "below"
+         lands, and the beat before it appears, are in solved.css + game.js.
+         `#solved.is-on` still means "this stage is solved" — that contract is
+         read all over the test suites and must not move. -->
     <div class="solved" id="solved" aria-live="polite">
-      <div class="solved-ring"></div>
       <div class="solved-inner">
-        <div class="solved-word" id="solvedWord">SOLVED</div>
-        <div class="solved-sub" id="solvedSub"></div>
+        <span class="solved-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none"
+               stroke="currentColor" stroke-width="2.8"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12.6 9.4 18 20 6.4"/>
+          </svg>
+        </span>
+        <span class="solved-text">
+          <span class="solved-word" id="solvedWord">SOLVED</span>
+          <span class="solved-sub" id="solvedSub"></span>
+        </span>
         <button class="btn btn-primary" id="btnNext">Next</button>
       </div>
     </div>

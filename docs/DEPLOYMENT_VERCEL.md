@@ -20,7 +20,7 @@ strand players on whatever build they first loaded. See *Caching* below.
 | Framework preset | **Other** (none — do not pick Vite/Next) |
 | Build command | **none** (leave empty) |
 | Install command | **none** |
-| Output directory | **`.`** (the repository root) |
+| Output directory | **`.`** (the repository root — set explicitly in `vercel.json`) |
 | Package manager | not used at deploy time |
 | Node version | irrelevant — nothing runs server-side |
 | Environment variables | **none.** See below. |
@@ -86,12 +86,38 @@ The deployed build is **28 files, about 640 KB**.
 
 ## Routing
 
-**No `vercel.json` rewrites, and none should be added.** This is not an SPA.
-There are exactly two HTML entry points — `/index.html` and `/global.html` —
-and both are real files on disk. Stage selection uses a query string
-(`/?level=52`), which static hosting serves correctly without any rewrite,
-because the path is still `/`. A catch-all SPA rewrite would break `404`s for
-the excluded files above, which is the opposite of what this project needs.
+**`/` is rewritten to `home.html`** (the landing page) and **`/play` to
+`index.html`** (the game). Nothing else is rewritten.
+
+The game deliberately stays at `index.html` rather than being renamed: about
+fifteen references across the test suites, `global.html`, `server.mjs` and the
+docs point at it, and `open index.html` off the disk has to keep working. Two
+rewrites cost nothing and move none of that.
+
+This is **not** an SPA and must not get a catch-all rewrite. Stage selection
+uses a query string (`/play?level=52`), which static hosting serves correctly
+because the path is unchanged. A catch-all would also break the `404`s that
+keep the answer key off the public build — the opposite of what this project
+needs. `browser-tests.mjs` serves the real file set through the real rewrite
+table and asserts both routes plus all nine 404s.
+
+### If the deploy 404s with `404 — not in /var/task`
+
+That string is Vercel's **serverless runtime** answering for a project that
+has no functions at all — it means the build produced no static output, so
+every path fell through. It is a build-configuration failure, not a routing
+one. Check, in this order:
+
+1. **Is `vercel.json` actually in the deployed commit?** This exact failure
+   happened once because the config existed locally and had never been pushed;
+   Vercel was building a tree that contained only `package.json` and the game
+   files, found no build script and no `public/` directory, and emitted
+   nothing.
+2. **Project → Settings → Build & Development Settings.** Framework Preset
+   *Other*; Build Command, Install Command and Output Directory all with
+   **Override off** (or Output Directory set to `.`). Dashboard values that
+   were saved earlier stick around and will fight `vercel.json`.
+3. **Root Directory** must be `./`, not a subfolder.
 
 ## Headers
 

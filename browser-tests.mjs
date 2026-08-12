@@ -41,9 +41,12 @@ const excluded = path => IGNORE.some(pat => {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (excluded(url.pathname)) { res.writeHead(404).end('not deployed'); return; }
-  let p = normalize(join(ROOT, decodeURIComponent(url.pathname)));
+  /* mirror vercel.json's rewrites so routing is tested, not assumed */
+  let routed = url.pathname;
+  for (const rw of (cfg.rewrites || [])) if (rw.source === routed) routed = rw.destination;
+  let p = normalize(join(ROOT, decodeURIComponent(routed)));
   if (!p.startsWith(ROOT)) { res.writeHead(403).end(); return; }
-  if (url.pathname.endsWith('/')) p = join(p, 'index.html');
+  if (routed.endsWith('/')) p = join(p, 'index.html');
   try {
     const body = await readFile(p);
     const h = { 'Content-Type': TYPES[extname(p)] || 'application/octet-stream' };
@@ -158,6 +161,23 @@ async function run(name, engine) {
     ok(await page.locator('.stage-failed').count() === 0, `${name}: ${what} loads without failing`);
     ok(await page.locator('#stage').evaluate(el => el.children.length) > 0,
        `${name}: ${what} renders something`);
+  }
+
+  /* ---- the front door ----------------------------------------------------
+     `/` is rewritten to the landing page, and `/play` to the game. index.html
+     stays where it is so nothing else in the project has to move. */
+  {
+    await page.goto(BASE + '/', { waitUntil: 'load' });
+    await page.waitForTimeout(400);
+    ok(await page.locator('.hero .logo').count() === 1, `${name}: / serves the landing page`);
+    ok((await page.locator('.play').getAttribute('href')) === 'index.html',
+       `${name}: the landing page's Play button points at the game`);
+    await page.goto(BASE + '/play', { waitUntil: 'load' });
+    await page.waitForTimeout(600);
+    ok(await page.locator('#stage').count() === 1, `${name}: /play serves the game`);
+    const homeOver = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    ok(homeOver <= 1, `${name}: the landing page does not overflow sideways`);
   }
 
   /* ---- the answer key must not be reachable on the deployed build ---- */

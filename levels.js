@@ -1846,7 +1846,9 @@ window.RULESET_LEVELS = [
     const { w, h } = ctx.size();
 
     const PATTERN = ['right', 'down'];
-    const STEP = 74;                      // how far a move must go to count
+    const SEGMENT = 32;                   // enough intent to name a direction
+    const CONTINUE = 16;                  // checkpoint a sustained segment
+    const DOMINANCE = 1.35;               // reject diagonal noise and wobble
 
     const start = { x: Math.round(w * 0.24), y: Math.round(h * 0.26) };
 
@@ -1888,32 +1890,58 @@ window.RULESET_LEVELS = [
     let idle = 0;
     let done = false;
 
-    /* reduce a drag into cardinal moves. Broad strokes only: this is about
-       direction and order, never coordinates. */
-    let last = null, acc = { x: 0, y: 0 }, seq = [];
+    /* Reduce a drag into directional segments, not distance-sized steps.
+       Continuing along the same axis checkpoints the probe without adding a
+       token. A new token needs sustained, dominant motion in another
+       direction, so ordinary wobble cannot manufacture a turn. */
+    let last = null, probe = { x: 0, y: 0 }, direction = null, seq = [];
+
+    function dominantMove(minimum) {
+      const ax = Math.abs(probe.x), ay = Math.abs(probe.y);
+      if (ax >= minimum && ax >= ay * DOMINANCE) return probe.x > 0 ? 'right' : 'left';
+      if (ay >= minimum && ay >= ax * DOMINANCE) return probe.y > 0 ? 'down' : 'up';
+      return null;
+    }
+
+    function readMove(dx, dy) {
+      probe.x += dx;
+      probe.y += dy;
+
+      const next = dominantMove(direction ? CONTINUE : SEGMENT);
+      if (!next) return;
+
+      if (next === direction) {
+        /* Same uninterrupted stroke: keep its name, forget its distance. */
+        probe = { x: 0, y: 0 };
+        return;
+      }
+
+      /* A turn has a higher bar than merely continuing the current stroke. */
+      if (direction && !dominantMove(SEGMENT)) return;
+      direction = next;
+      if (seq[seq.length - 1] !== next) seq.push(next);
+      probe = { x: 0, y: 0 };
+    }
 
     ctx.drag(obj, {
       affordance: false, bounds: 'stage', enabled: () => !done && !demoing,
-      onGrab(el, e) { last = { x: e.clientX, y: e.clientY }; acc = { x: 0, y: 0 }; seq = []; },
+      onGrab(el, e) {
+        last = { x: e.clientX, y: e.clientY };
+        probe = { x: 0, y: 0 };
+        direction = null;
+        seq = [];
+      },
       onMove(el, e) {
         if (!last) return;
-        acc.x += e.clientX - last.x;
-        acc.y += e.clientY - last.y;
+        readMove(e.clientX - last.x, e.clientY - last.y);
         last = { x: e.clientX, y: e.clientY };
         idle = 0;
-
-        if (Math.abs(acc.x) >= STEP && Math.abs(acc.x) > Math.abs(acc.y)) {
-          seq.push(acc.x > 0 ? 'right' : 'left');
-          acc = { x: 0, y: 0 };
-        } else if (Math.abs(acc.y) >= STEP && Math.abs(acc.y) > Math.abs(acc.x)) {
-          seq.push(acc.y > 0 ? 'down' : 'up');
-          acc = { x: 0, y: 0 };
-        }
       },
       onDrop() {
         if (done) return;
-        const got = seq.slice(0, PATTERN.length).join(',');
-        if (got === PATTERN.join(',')) {
+        const matches = seq.length === PATTERN.length &&
+          seq.every((move, i) => move === PATTERN[i]);
+        if (matches) {
           done = true;
           ctx.say('');
           obj.classList.add('is-landed');

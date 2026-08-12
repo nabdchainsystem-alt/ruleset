@@ -1474,33 +1474,145 @@ window.addEventListener('unhandledrejection', e => {
 
   /* ================================================= 22 — RU, repeat ---- */
   {
-    const w = await loadLevel(22); const box = hookSolve(w); const d = w.document;
-    const ghost = d.querySelector('.echo-ghost');
-    log(!!ghost, 'a demonstration plays before anything is asked');
-    log(d.querySelector('.instruction').style.opacity === '0',
-        'and the words are withheld until it has finished');
-    await wait(2600);
-    log(d.querySelector('.instruction').style.opacity === '1', 'then the instruction appears');
+    async function ready22(hook = true) {
+      const w = await loadLevel(22);
+      const box = hook ? hookSolve(w) : null;
+      await wait(2300);
+      return { w, box, d: w.document };
+    }
 
-    const obj = d.querySelector('.echo-obj');
-    /* wrong shape: down then right — the reverse order */
-    const s = mid(obj);
-    pev(w, 'pointerdown', obj, s.x, s.y); await wait(20);
-    pev(w, 'pointermove', obj, s.x, s.y + 120); await wait(20);
-    pev(w, 'pointermove', obj, s.x + 140, s.y + 120); await wait(20);
-    pev(w, 'pointerup', obj, s.x + 140, s.y + 120); await wait(120);
-    log(!box.solved, 'the same two moves in the wrong order do not count');
-    await wait(3200);
+    async function gesture(w, obj, points) {
+      const s = mid(obj);
+      pev(w, 'pointerdown', obj, s.x, s.y);
+      await wait(16);
+      for (const [x, y] of points) {
+        pev(w, 'pointermove', obj, s.x + x, s.y + y);
+        await wait(16);
+      }
+      const end = points[points.length - 1] || [0, 0];
+      pev(w, 'pointerup', obj, s.x + end[0], s.y + end[1]);
+      await wait(120);
+    }
 
-    /* right shape: across, then down — broad strokes, no coordinates */
-    const s2 = mid(obj);
-    pev(w, 'pointerdown', obj, s2.x, s2.y); await wait(20);
-    pev(w, 'pointermove', obj, s2.x + 155, s2.y + 11); await wait(20);
-    pev(w, 'pointermove', obj, s2.x + 166, s2.y + 143); await wait(20);
-    pev(w, 'pointerup', obj, s2.x + 166, s2.y + 143); await wait(120);
-    log(!box.solved, 'the original is echoed back before the level ends');
-    await wait(2600);
-    log(box.solved, 'reproducing the demonstrated path satisfies RU VE NA');
+    /* The silent demonstration remains the source of the pattern. */
+    {
+      const w = await loadLevel(22); const d = w.document;
+      const ghost = d.querySelector('.echo-ghost');
+      log(!!ghost, 'a demonstration plays before anything is asked');
+      log(d.querySelector('.instruction').style.opacity === '0',
+          'and the words are withheld until it has finished');
+      await wait(2300);
+      log(d.querySelector('.instruction').style.opacity === '1', 'then the instruction appears');
+    }
+
+    /* A 200px horizontal leg is one segment, despite its distance. */
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[200, 3], [204, 153]]);
+      log(!box.solved, 'a correct long RIGHT + DOWN replays the demonstration before solving');
+      await wait(2300);
+      log(box.solved, 'long RIGHT + DOWN passes');
+    }
+
+    /* A compact but unambiguous version has the same directional meaning. */
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[48, 2], [50, 54]]);
+      await wait(2300);
+      log(box.solved, 'short-but-clear RIGHT + DOWN passes');
+    }
+
+    /* Many browser events along one long stroke must not become many moves. */
+    {
+      const { w, box, d } = await ready22();
+      const points = [];
+      for (let x = 15; x <= 300; x += 15) points.push([x, (x / 15) % 2 ? 2 : -1]);
+      for (let y = 17; y <= 102; y += 17) points.push([300 + (y % 34 ? 2 : -2), y]);
+      await gesture(w, d.querySelector('.echo-obj'), points);
+      await wait(2300);
+      log(box.solved, 'repeated pointer events during RIGHT remain one RIGHT segment');
+    }
+
+    /* Wobble and a gradual human turn still resolve by dominant intent. */
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [
+        [22, 3], [47, -2], [75, 5], [104, 1], [132, 7],
+        [151, 17], [164, 36], [171, 62], [168, 91], [174, 124]
+      ]);
+      await wait(2300);
+      log(box.solved, 'RIGHT + DOWN with realistic wobble and a curved turn passes');
+    }
+
+    /* Wrong or incomplete direction sequences remain wrong. */
+    {
+      const { w, box, d } = await ready22();
+      const obj = d.querySelector('.echo-obj');
+      const ghost = d.querySelector('.echo-ghost');
+      /* the authored value, not the laid-out one: .echo-ghost transitions
+         `left`, and headless Chrome never advances a transition, so
+         offsetLeft stays frozen at the start of the move */
+      const ghostStart = parseFloat(ghost.style.left) || 0;
+      const home = { x: obj.offsetLeft, y: obj.offsetTop };
+      await gesture(w, obj, [[2, 100], [122, 104]]);
+      log(!box.solved, 'DOWN + RIGHT fails');
+      await wait(360);
+      log(Math.abs(obj.offsetLeft - home.x) < 4 && Math.abs(obj.offsetTop - home.y) < 4,
+          'a failed pattern returns the object to its start');
+      await wait(400);
+      log(ghost.style.opacity === '1' && (parseFloat(ghost.style.left) || 0) > ghostStart + 100,
+          'a failed pattern replays the RIGHT-then-DOWN demonstration');
+    }
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[110, 1], [113, -99]]);
+      log(!box.solved, 'RIGHT + UP fails');
+    }
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[140, 4]]);
+      log(!box.solved, 'RIGHT only fails');
+    }
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[3, 120]]);
+      log(!box.solved, 'DOWN only fails');
+    }
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[-110, 2], [-107, 102]]);
+      log(!box.solved, 'LEFT + DOWN fails');
+    }
+    {
+      const { w, box, d } = await ready22();
+      await gesture(w, d.querySelector('.echo-obj'), [[100, 1], [102, 91], [20, 94]]);
+      log(!box.solved, 'RIGHT + DOWN followed by scribbling does not pass as a valid prefix');
+    }
+
+    /* Restart destroys any partial gesture state along with the old stage. */
+    {
+      const { w, box, d } = await ready22();
+      const old = d.querySelector('.echo-obj');
+      const s = mid(old);
+      pev(w, 'pointerdown', old, s.x, s.y);
+      pev(w, 'pointermove', old, s.x + 100, s.y + 2);
+      w.RULESET.restart();
+      await wait(2300);
+      await gesture(w, w.document.querySelector('.echo-obj'), [[2, 100]]);
+      log(!box.solved, 'restart resets partial direction-sequence state');
+    }
+
+    /* Use the real solve path once: the normal game must advance to Level 23. */
+    {
+      const { w, d } = await ready22(false);
+      await gesture(w, d.querySelector('.echo-obj'), [[160, 2], [164, 122]]);
+      await wait(2300);
+      log(d.querySelector('#solved').classList.contains('is-on'),
+          'completing Level 22 triggers the normal solved state');
+      click(w, d.querySelector('#btnNext'));
+      await wait(300);
+      log(w.RULESET.ctx.level.id === 23, 'normal progression after Level 22 loads Level 23');
+    }
   }
 
   /* ================================================== 23 — LI, light ---- */

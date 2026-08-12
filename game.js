@@ -89,8 +89,10 @@ const dom = {
   voidZone:  $('#void'),
   voidItems: $('#voidItems'),
   solved:    $('#solved'),
+  solvedInner:$('#solved .solved-inner'),
   solvedWord:$('#solvedWord'),
   solvedSub: $('#solvedSub'),
+  bottombar: $('.bottombar'),
   btnNext:   $('#btnNext'),
   btnHint:   $('#btnHint'),
   btnRestart:$('#btnRestart'),
@@ -1318,6 +1320,18 @@ const LEVELS = window.RULESET_ROUTE
 const keyOf = st => (st && st.id != null) ? st.id : (st && st.routeId) || null;
 const isBreak = st => !!st && st.id == null && !!st.routeId;
 
+/* The pause between solving a stage and the success panel arriving. The
+   player has just built the thing; they get to look at it first. The stage's
+   own settle (transform .5s) lands inside this, then a held breath, then the
+   panel rises from below the board. Long enough to register the win, short
+   enough that nothing feels stuck. */
+const SOLVED_BEAT = 800;
+
+/* How long the success panel then stays before a stage advances on its own.
+   Unchanged from before the beat existed: the panel keeps exactly the time it
+   always had, the beat is added in front of it. */
+const SOLVED_DWELL = 1900;
+
 const engine = {
   index: 0,
   ctx: null,
@@ -1472,7 +1486,10 @@ this.load(first);
     this.levelStarted = Date.now();
     State.currentLevel = keyOf(level);
     dom.btnHint.disabled = !this.hintsOf(level).length;
-    dom.solved.classList.remove('is-on');
+    /* a pending reveal from the stage being left behind must not surface on
+       this one — every route out of a level passes through here */
+    clearTimeout(this.solvedReveal);
+    dom.solved.classList.remove('is-on', 'is-shown', 'is-docked');
     dom.stage.className = 'stage';
     dom.stage.innerHTML = '';
     dom.loose.innerHTML = '';
@@ -1631,11 +1648,51 @@ this.load(first);
       ? S().completeSub(save.solved.length, LEVELS.length)
       : (t(level.note) || '');
     dom.btnNext.textContent = last ? S().playAgain : S().next;
+
+    /* `is-on` is the contract — it means "this stage is solved" and is read
+       across the test suites, so it lands here, immediately, exactly as it
+       always did. What waits is the panel: `is-shown` carries the entrance,
+       and until it arrives the layer is invisible and takes no clicks. */
     dom.solved.classList.add('is-on');
-    dom.btnNext.focus({ preventScroll: true });
+    dom.solved.classList.remove('is-shown');
+
+    clearTimeout(this.solvedReveal);
+    this.solvedReveal = setTimeout(() => {
+      this.placeSolved();
+      dom.solved.classList.add('is-shown');
+      /* focus follows the panel, not the solve: a keyboard player should not
+         be sitting on a button they cannot see */
+      dom.btnNext.focus({ preventScroll: true });
+    }, SOLVED_BEAT);
 
     if (!last) {
-      this.autoNext = setTimeout(() => this.next(), 1900);
+      this.autoNext = setTimeout(() => this.next(), SOLVED_BEAT + SOLVED_DWELL);
+    }
+  },
+
+  /**
+   * Put the success panel where it cannot cover the board.
+   *
+   * First choice is the floor of the board, a breath under the stage. When the
+   * window is too short for that — phones, and any window where the stage has
+   * grown into the slack — it docks to the floor of the window instead, over
+   * the chrome bar, which is the only surface down there that is not the
+   * puzzle. Measured rather than guessed at a breakpoint, because the room
+   * under the stage depends on the window height, the instruction's line count
+   * and how tall this particular panel came out.
+   */
+  placeSolved() {
+    const inner = dom.solvedInner;
+    if (!inner) return;
+    dom.solved.classList.remove('is-docked');       // measure the free layout
+    const room = rectOf(dom.board).bottom - rectOf(dom.stage).bottom;
+    const need = inner.offsetHeight + 40;           // panel + air above and below
+    dom.solved.classList.toggle('is-docked', room < need);
+    /* the docked panel has to cover the chrome bar completely, or the bottom
+       of that bar peeks out underneath it */
+    if (dom.bottombar) {
+      dom.solved.style.setProperty(
+        '--dock-h', Math.ceil(rectOf(dom.bottombar).height) + 'px');
     }
   },
 
@@ -1865,6 +1922,13 @@ this.load(first);
 
   watchZoom() {
     const tick = () => this.paintZoom();
+    /* Levels 6 and 7 are solved by changing the window, so the window can
+       still be changing while the panel is up: re-decide where it sits. Only
+       on a real resize — this rewrites a class, and the zoom poll below runs
+       every 1.2s whether anything moved or not. */
+    window.addEventListener('resize', () => {
+      if (dom.solved.classList.contains('is-shown')) this.placeSolved();
+    });
     window.addEventListener('resize', tick);
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', tick);

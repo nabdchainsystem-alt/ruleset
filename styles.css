@@ -20,6 +20,10 @@
   --good:      #0f9e6b;
   --good-bg:   rgba(15, 158, 107, .10);
   --warn:      #d75b36;
+  /* Level 3 is called "Red" and its rule is "do not touch red", so the
+     buttons have to READ as red. --warn is a burnt orange and is used by
+     eighteen other things that should stay orange, hence a token of its own. */
+  --red:       #d1271b;
 
   --r-sm: 8px;
   --r-md: 12px;
@@ -57,6 +61,7 @@ html.is-dark {
   --good:      #3ddba1;
   --good-bg:   rgba(61, 219, 161, .12);
   --warn:      #ff8a63;
+  --red:       #f04438;      /* lifted for dark, still red and not orange */
   color-scheme: dark;
 }
 
@@ -491,8 +496,8 @@ button { font: inherit; color: inherit; }
 .gbtn:hover { border-color: var(--ink); }
 .gbtn:active { transform: scale(.96); }
 .gbtn.is-red {
-  background: var(--warn);
-  border-color: var(--warn);
+  background: var(--red);
+  border-color: var(--red);
   color: #fff;
 }
 .gbtn.is-off { opacity: .4; cursor: not-allowed; }
@@ -1581,6 +1586,33 @@ button { font: inherit; color: inherit; }
   color: var(--bg);
 }
 .btn-primary:hover { background: var(--ink); opacity: .88; }
+
+/* ----------------------------------------------------------------- focus -- */
+/* Keyboard focus had no styling anywhere, and three of these controls turn the
+   browser's own ring off (.field, .lab-input, an editable instruction word),
+   which left a keyboard player with nothing at all.
+   The ring is SOLID on purpose. A dotted accent outline already means "this can
+   be picked up" — see .is-grabbable and the claimed progress bar — so focus
+   must not borrow that vocabulary.
+   Only named, always-visible controls are listed. No blanket `.stage *` rule:
+   in several levels whether a control can be seen IS the puzzle, and a ring
+   that lit one up on Tab would answer it. */
+.btn:focus-visible,
+.gbtn:focus-visible,
+.field:focus-visible,
+.lab-input:focus-visible,
+.echo-rewind:focus-visible,
+.sea-link:focus-visible,
+.zoomchip:focus-visible,
+.instruction .w.is-editable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* The text controls sit tight against their neighbours, so their ring hugs. */
+.field:focus-visible,
+.lab-input:focus-visible,
+.instruction .w.is-editable:focus-visible { outline-offset: 2px; }
 
 /* ---------------------------------------------------------------- solved -- */
 .solved {

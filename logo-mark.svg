@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="rs-mark-title">
+  <title id="rs-mark-title">RULESET</title>
+  <!-- The glyph-only mark: the bar on its own, in the same rounded square the
+       game already uses as its favicon. Same lineage, one step heavier so it
+       survives a 16px tab. `svg:root` matches only when this file is its own
+       document, so an inlined copy inherits the host page's ink instead. -->
+  <style>
+    svg:root { color: #121316; --rs-bar: #2f5bff; }
+    @media (prefers-color-scheme: dark) {
+      svg:root { color: #f0f0ee; --rs-bar: #6f8dff; }
+    }
+  </style>
+  <rect width="32" height="32" rx="7" fill="currentColor"/>
+  <rect class="rs-bar" x="7" y="14" width="18" height="4" rx="2" fill="var(--rs-bar, #2f5bff)"/>
+</svg>

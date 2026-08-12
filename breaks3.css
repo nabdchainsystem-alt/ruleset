@@ -247,3 +247,20 @@
   .brk-pointer::before { left: 9px; height: 20px; }
   .brk-pointer::after  { top: 9px; width: 20px; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Two things in B16–B25 answer the player with movement instead of a word:
+     brkNudge on a blocked pointer and on a stuck object. The global reduce
+     rule in styles.css collapses every animation to .001ms, so with motion off
+     that shove is invisible and a refused move gets no answer at all — the
+     player cannot tell "it did not move" from "nothing happened".
+
+     Both are class toggles held for 320ms, not animations, so the same 320ms
+     can carry a static answer instead. --warn is what refusal looks like
+     everywhere else in the project (.status.is-warn, .void.is-hot,
+     .field.is-bad), so the vocabulary is already learned. */
+  .brk-pointer.is-blocked::before,
+  .brk-pointer.is-blocked::after { background: var(--warn); }
+
+  .brk-locked.is-stuck { box-shadow: 0 0 0 3px var(--warn); }
+}

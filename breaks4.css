@@ -164,3 +164,12 @@
   .brk-word.brk-part { font-size: 14px; letter-spacing: .1em; }
   .brk-said-a, .brk-said-b { font-size: 12px; letter-spacing: .12em; }
 }
+
+/* prefers-reduced-motion: deliberately no override here.
+   Every transition in this file is attached to a class the level ADDS AND
+   LEAVES ON — is-merged, is-done, is-set, is-gone, is-settled, is-on. The
+   global reduce rule in styles.css collapses the duration, so each of those
+   states still renders, just instantly; nothing in B26–B30 is told by motion
+   alone. (Compare breaks3.css, where two 320ms refusals are removed and then
+   put back, and therefore DO need a static stand-in.)
+   Re-check this note if a level here ever adds a class it takes away again. */

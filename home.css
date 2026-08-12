@@ -1,0 +1,213 @@
+/* ==========================================================================
+   RULESET — the landing page
+   --------------------------------------------------------------------------
+   The game's own restraint, at rest. Tokens mirror styles.css so the page and
+   the game are unmistakably the same object; nothing here is imported, because
+   styles.css carries a whole game's worth of rules this page has no use for.
+
+   One accent, one idea per screen, and a great deal of nothing. The blue bar
+   from the logo is the only ornament, and it is used exactly twice.
+   ========================================================================== */
+
+:root {
+  --bg:        #f4f4f1;
+  --panel:     #ffffff;
+  --ink:       #121316;
+  --ink-soft:  #4a4c52;
+  --muted:     #9a9ba1;
+  --line:      #e2e2dd;
+  --accent:    #2f5bff;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        #0d0e11;
+    --panel:     #15161a;
+    --ink:       #f0f0ee;
+    --ink-soft:  #b6b7bd;
+    --muted:     #6b6d76;
+    --line:      #26282e;
+    --accent:    #6f8dff;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: clamp(48px, 12vh, 132px) 24px calc(56px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---- the mark ------------------------------------------------------------ */
+.hero { text-align: center; }
+
+/* The wordmark carries the page. Capped by width AND by viewport so it never
+   crowds a small screen, and never becomes a banner on a large one. */
+.logo {
+  display: block;
+  width: min(340px, 72vw);
+  height: auto;
+  margin: 0 auto;
+}
+
+.lede {
+  margin: clamp(28px, 5vh, 44px) auto 0;
+  /* wide enough to hold the sentence on one line where there is room: at 30ch
+     it broke before "puzzle." and left the word orphaned */
+  max-width: 46ch;
+  text-wrap: balance;
+  font-size: clamp(17px, 2.4vw, 20px);
+  line-height: 1.5;
+  color: var(--ink-soft);
+  letter-spacing: -.005em;
+}
+
+/* ---- the way in ---------------------------------------------------------- */
+.play {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: clamp(30px, 5vh, 46px);
+  padding: 14px 40px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 15px;
+  letter-spacing: .04em;
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color .2s var(--ease), transform .12s var(--ease);
+}
+
+.play:hover { border-color: var(--accent); }
+.play:active { transform: scale(.985); }
+
+.play:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* the logo's bar, underlining the only thing on the page you can press.
+   Widens on hover via scaleX rather than width: transform is composited, so
+   the growth costs no layout on a page whose whole point is stillness. */
+.play-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 46px;
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  transform: translateX(-50%) scaleX(1);
+  transition: transform .25s var(--ease);
+}
+
+.play:hover .play-bar { transform: translateX(-50%) scaleX(1.65); }
+
+.under {
+  margin: 22px auto 0;
+  max-width: 38ch;
+  text-wrap: balance;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+/* ---- what you are walking into ------------------------------------------- */
+.facts {
+  display: grid;
+  gap: 2px;                       /* hairline separation, not cards */
+  margin-top: clamp(72px, 14vh, 128px);
+  border-top: 1px solid var(--line);
+}
+
+.fact {
+  padding: 30px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fact h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.fact p {
+  margin: 0 0 26px;
+  max-width: 56ch;
+  font-size: 15.5px;
+  line-height: 1.68;
+  color: var(--ink-soft);
+}
+
+/* ---- foot ---------------------------------------------------------------- */
+.foot {
+  margin-top: clamp(56px, 9vh, 84px);
+  text-align: center;
+}
+
+.foot-play {
+  display: inline-block;
+  padding: 4px 0 5px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+  text-decoration: none;
+  transition: border-color .2s var(--ease);
+}
+
+.foot-play:hover { border-bottom-color: var(--accent); }
+
+.foot-play:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.foot-note {
+  margin: 26px auto 0;
+  max-width: 40ch;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ---- small screens -------------------------------------------------------
+   The page is one column everywhere, so this only relaxes the vertical rhythm
+   rather than rearranging anything. */
+@media (max-width: 480px) {
+  .page { padding-top: 52px; }
+  .fact { padding-top: 26px; }
+  .fact p { font-size: 15px; }
+  .play { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play, .play-bar, .foot-play { transition: none; }
+  .play:active { transform: none; }
+}

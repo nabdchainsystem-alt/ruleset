@@ -1,0 +1,168 @@
+/* ==========================================================================
+   RULESET — the success state
+   --------------------------------------------------------------------------
+   What this replaces: styles.css centres a large card OVER the board
+   (`.solved { position: absolute; inset: 0 }`) and shows it the instant a
+   level is solved. Two things were wrong with that. It covered the puzzle the
+   player had just built, and it arrived before they had looked at it.
+
+   styles.css is deliberately NOT edited — it is owned elsewhere — so this
+   sheet is loaded after it and re-declares the same selectors at equal or
+   greater specificity. Every property the old block sets is re-set here
+   rather than left to cascade order alone, so the old rules can move around
+   in their file without changing what happens on screen.
+
+   Two rules govern the result.
+
+     · It sits BELOW the stage and never overlaps it. Where "below" lands
+       depends on the room the window has: the floor of the board when there
+       is space under the stage, the floor of the window otherwise (phones and
+       short windows, where the stage has eaten the slack). game.js measures
+       and adds `.is-docked`. Both positions are out of flow, so the board
+       never moves when the success state arrives — a layout shift at the
+       moment of success reads as a bug.
+
+     · `.is-on` still means "this stage is solved" and is still applied the
+       moment it happens; the test suites read exactly that. The *entrance* is
+       carried by a second class, `.is-shown`, which game.js adds one beat
+       later so the player sees their own solution first.
+   ========================================================================== */
+
+/* ---- the layer ---------------------------------------------------------- */
+/* `.solved.is-on` is matched alongside `.solved` so the old is-on rule (which
+   makes the whole layer visible and clickable) is answered at equal weight. */
+.solved,
+.solved.is-on {
+  position: absolute;
+  inset: auto 0 0 0;                 /* the board's floor, under everything */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 16px clamp(10px, 3vh, 30px);
+  opacity: 1;                        /* the panel carries its own entrance */
+  pointer-events: none;
+  z-index: 80;
+}
+
+/* No room under the stage: dock to the window's floor instead, over the
+   chrome bar — the only surface down there that is not the puzzle. Fixed, so
+   this position cannot push the board around either. */
+.solved.is-docked,
+.solved.is-on.is-docked {
+  position: fixed;
+  padding: 0;
+}
+
+.solved.is-shown { pointer-events: auto; }
+
+/* ---- the panel ---------------------------------------------------------- */
+.solved-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  width: min(600px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .10);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .42s var(--ease-out), transform .42s var(--ease-out);
+}
+
+/* The old sheet drives this element with `riseIn … forwards`. An animation
+   with a forwards fill outranks every ordinary declaration, so it has to be
+   switched off rather than merely overridden — hence the one !important in
+   this file. */
+.solved-inner,
+.solved.is-on .solved-inner { animation: none !important; }
+
+.solved.is-shown .solved-inner { opacity: 1; transform: none; }
+
+/* ---- the mark ----------------------------------------------------------- */
+/* Success has to be legible at a glance now that the word is small. A check
+   in --good, on the same tint the dev grid already uses for a solved stage. */
+.solved-mark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--good-bg);
+  color: var(--good);
+}
+
+/* ---- the words ---------------------------------------------------------- */
+.solved-text {
+  flex: 1 1 auto;
+  min-width: 0;               /* a long note wraps instead of shoving Next out */
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: start;
+}
+
+.solved-word {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  line-height: 1.3;
+  color: var(--good);
+}
+
+.solved-sub {
+  display: block;
+  max-width: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.4;
+  letter-spacing: .02em;
+  text-align: start;
+  color: var(--muted);
+}
+.solved-sub:empty { display: none; }
+
+/* ---- the controls ------------------------------------------------------- */
+/* Next is always last in the row, whichever way the row runs; the Vault's
+   quiet "save a thought" button appends itself here and would otherwise land
+   after it. */
+.solved-inner .solved-mark  { order: 0; }
+.solved-inner .solved-text  { order: 1; }
+.solved-inner .vault-thought { order: 2; flex: 0 0 auto; }
+.solved-inner .btn-primary {
+  order: 3;
+  flex: 0 0 auto;
+  padding: 8px 15px;
+}
+
+/* ---- docked: the window's floor ----------------------------------------- */
+/* Full bleed, and at least as tall as the chrome bar it covers — game.js
+   measures that bar and writes --dock-h. Otherwise the bottom of the footer
+   would peek out below the panel. */
+.solved.is-docked .solved-inner {
+  width: 100%;
+  min-height: var(--dock-h, 78px);
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-width: 1px 0 0 0;
+  border-radius: 0;
+  background: var(--bg);
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, .10);
+  transform: translateY(14px);
+}
+.solved.is-docked.is-shown .solved-inner { transform: none; }
+
+/* ---- small screens ------------------------------------------------------ */
+@media (max-width: 620px) {
+  .solved-inner { gap: 10px; }
+  .solved-inner .btn-primary { padding: 8px 13px; font-size: 12px; }
+  .solved-sub { font-size: 11px; }
+}
+
+/* Reduced motion: styles.css already flattens every duration to nothing, so
+   the panel simply appears. The beat before it stays — it is a pause, not an
+   animation, and it exists so the player can look at what they made. */
