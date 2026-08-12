@@ -1631,6 +1631,54 @@ button { font: inherit; color: inherit; }
 .lab-input:focus-visible,
 .instruction .w.is-editable:focus-visible { outline-offset: 2px; }
 
+/* ------------------------------------------------------- level 1 only ----
+   The one place in the game that explains itself. It says the single thing
+   the first screen cannot show — that the dot is the player — and then gets
+   out of the way. Muted, monospaced and small, so it reads as an annotation
+   on the game rather than as part of it. */
+.l1-hello {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  direction: ltr;            /* the arrow points at the dot in both languages */
+  pointer-events: none;      /* never in the way of the thing it points at */
+  opacity: 0;
+  transition: opacity .55s var(--ease);
+}
+
+.l1-hello.is-on { opacity: 1; }
+
+.l1-arrow {
+  position: relative;
+  width: 30px;
+  height: 1px;
+  background: var(--muted);
+}
+
+/* the head, on the dot's side */
+.l1-arrow::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -3px;
+  border: 3.5px solid transparent;
+  border-right-color: var(--muted);
+}
+
+.l1-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .l1-hello { transition: none; }
+}
+
 /* ---------------------------------------------------------------- solved --
    The success state now lives entirely in solved.css. It used to be a card
    centred OVER the board, which covered the puzzle the player had just built;
@@ -1712,6 +1760,7 @@ kbd {
 /* everything below can carry Arabic */
 [dir="rtl"] .status,
 [dir="rtl"] .hintline,
+[dir="rtl"] .l1-label,
 [dir="rtl"] .level-name,
 [dir="rtl"] .void-label,
 [dir="rtl"] .void-chip,
@@ -1728,6 +1777,7 @@ kbd {
 [dir="rtl"] .btn,
 [dir="rtl"] .keymap .cap,
 [dir="rtl"] .readout,
+[dir="rtl"] .l1-label,
 [dir="rtl"] .para {
   letter-spacing: normal;
 }

@@ -60,6 +60,36 @@ window.RULESET_LEVELS = [
     ctx.openStage();
     ctx.drag(dot);
 
+    /* Stage one, screen one: nothing here has taught the player that the dot
+       is them. Without that, "reach the end" has no subject and the solution
+       reads as arbitrary. So it is simply said — once, quietly, and only on
+       this level. It leaves the moment the player touches anything, because
+       an instruction that stays after it has been understood is clutter.
+
+       Pinned LTR: the arrow points at the dot, and the dot sits on the left
+       in both languages because the level places it by coordinate. */
+    const hello = ctx.el('div', 'l1-hello', {
+      x: 60 + 22 + 12, y: Math.round(h / 2 - 8)
+    });
+    hello.dir = 'ltr';
+    ctx.el('span', 'l1-arrow', { parent: hello });
+    ctx.el('span', 'l1-label', {
+      parent: hello,
+      text: ctx.t({ en: 'this is you', ar: 'هذا أنت' })
+    });
+    ctx.after(400, () => hello.classList.add('is-on'));
+
+    /* It steps aside while something is being carried — a label sitting on top
+       of the thing you are moving is in the way — and comes back when you let
+       go, because until this is solved the fact is still worth knowing. */
+    let met = false;
+    const dismiss = () => hello.classList.remove('is-on');
+    const restore = () => { if (!met) hello.classList.add('is-on'); };
+    /* capture phase on the window: the drag handler stops the event before it
+       reaches the board, so a bubbling listener there never hears it */
+    ctx.on(window, 'pointerdown', dismiss, true);
+    ctx.on(window, 'pointerup', () => ctx.after(260, restore));
+
     const door = ctx.el('div', 'obj door', { x: w - 90, y: Math.round(h / 2 - 37) });
     const pos = { x: w - 90, y: h / 2 - 37 };
 
@@ -93,7 +123,9 @@ window.RULESET_LEVELS = [
     ctx.words(END, { discard: false });
     ctx.check(() => {
       const end = ctx.word(END);
-      return !!end && ctx.hits(end, dot, 4);
+      const hit = !!end && ctx.hits(end, dot, 4);
+      if (hit) { met = true; hello.classList.remove('is-on'); }
+      return hit;
     });
   }
 },
