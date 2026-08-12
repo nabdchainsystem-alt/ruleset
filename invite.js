@@ -663,7 +663,12 @@ let panelEl = null, scrimEl = null, lastFocus = null;
 let ownerKeyError = '';
 
 function openPanel() {
-  if (dead || !registered()) return;
+  if (dead) return;
+  /* Registration is what the gate produces, and the gate never runs locally —
+     so requiring it here is what hid the owner's own profile on his machine.
+     The panel is safe to open unregistered: it shows a name field and the
+     owner-key form, which is exactly what is needed to become the owner. */
+  if (!registered() && !isLocal()) return;
   if (panelEl) { renderPanel(); return; }
   lastFocus = document.activeElement;
 
@@ -823,7 +828,13 @@ let chipEl = null;
 let keepAlive = 0;
 
 function mountChip() {
-  if (dead || !registered() || !gateApplies()) return;
+  if (dead) return;
+  /* The gate is off on a local host, so nobody ever registers there — which
+     also left the owner with no way into his own profile to make invitations.
+     The gate and the profile are different things: block strangers only in
+     production, but let the owner reach his profile anywhere. */
+  if (!gateApplies() && !isLocal()) return;
+  if (!registered() && !isLocal()) return;
   if (chipEl && chipEl.isConnected) { paintChip(); return; }
   const host = document.querySelector('.bottom-left');
   if (!host) return;
@@ -843,7 +854,7 @@ function mountChip() {
 function paintChip() {
   if (!chipEl) return;
   const n = chipEl.querySelector('.ivt-chip-name');
-  if (n) n.textContent = player.name || '—';     // textContent: it is their text
+  if (n) n.textContent = player.name || T('profile');   // textContent: their text
   chipEl.title = T('profileOpen');
   chipEl.setAttribute('aria-label', T('profileOpen') + ' — ' + (player.name || ''));
   chipEl.classList.toggle('is-owner', !!player.owner);
@@ -902,10 +913,10 @@ function apply() {
   if (dead) return;
   player = read();
 
-  if (!gateApplies()) {                          // local: no gate, no chip
+  if (!gateApplies()) {                          // local: no gate — but a profile
     if (gateEl) { gateEl.remove(); gateEl = null; }
     unblock();
-    if (chipEl) { chipEl.remove(); chipEl = null; }
+    mountChip();
     return;
   }
 
@@ -947,7 +958,8 @@ function boot() {
     /* The bottom bar is rebuilt by levels that take it over, so the chip is
        re-hung when it goes missing — the same cheap watch the Vault uses. */
     keepAlive = setInterval(guard(() => {
-      if (!gateApplies() || !registered()) return;
+      if (!gateApplies() && !isLocal()) return;
+      if (!registered() && !isLocal()) return;
       if (!chipEl || !chipEl.isConnected) { chipEl = null; mountChip(); }
     }), 1500);
 
