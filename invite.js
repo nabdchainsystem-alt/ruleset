@@ -101,7 +101,15 @@ function isLocal() {
 function gateApplies() {
   if (API._forceGate === true) return true;
   if (API._forceGate === false) return false;
-  return !isLocal();
+  /* ?gate=1 on a LOCAL host only, so the owner can rehearse the whole
+     invitation flow before deploying. It can only ever turn the gate ON, and
+     only where the gate is otherwise off, so there is nothing here a visitor
+     could type to get past anything. */
+  if (isLocal()) {
+    try { if (/[?&]gate=1(&|$)/.test(location.search)) return true; } catch (e) {}
+    return false;
+  }
+  return true;
 }
 
 /* ================================================================ codes == */
