@@ -66,6 +66,34 @@ window.RULESET_LEVELS = [
        quietly, and only on this level. */
     const you = ctx.note(dot, { en: 'this is you', ar: 'هذا أنت' });
 
+    const door = ctx.el('div', 'obj door', { x: w - 90, y: Math.round(h / 2 - 37) });
+    const pos = { x: w - 90, y: h / 2 - 37 };
+
+    // The door retreats to whichever corner is furthest from the dot.
+    ctx.frame(dt => {
+      const s = ctx.size();
+      const dx = (parseFloat(dot.style.left) || 0) + 11;
+      const dy = (parseFloat(dot.style.top) || 0) + 11;
+
+      const corners = [
+        [18, 18], [s.w - 52, 18],
+        [18, s.h - 92], [s.w - 52, s.h - 92]
+      ];
+      let best = corners[0], bestD = -1;
+      for (const c of corners) {
+        const d = Math.hypot(c[0] + 17 - dx, c[1] + 37 - dy);
+        if (d > bestD) { bestD = d; best = c; }
+      }
+
+      const close = Math.hypot(pos.x + 17 - dx, pos.y + 37 - dy) < 280;
+      if (close) {
+        const k = Math.min(1, dt * 3.2);
+        pos.x += (best[0] - pos.x) * k;
+        pos.y += (best[1] - pos.y) * k;
+        ctx.place(door, Math.round(pos.x), Math.round(pos.y));
+      }
+    });
+
     // The actual solution: bring "end" to the dot.
     const END = { en: 'end', ar: 'النهاية' };
     ctx.words(END, { discard: false });
