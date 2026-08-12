@@ -623,7 +623,19 @@ window.addEventListener('unhandledrejection', e => {
         'AR instruction has no letter-spacing (it would break the cursive joins)');
     log(cs('.status').letterSpacing === 'normal', 'AR status line has no letter-spacing');
     log(cs('#btnRestart').letterSpacing === 'normal', 'AR buttons have no letter-spacing');
-    log(cs('.mark').letterSpacing !== 'normal', 'AR the Latin wordmark keeps its tracking');
+    /* The wordmark used to be letter-spaced text, and this checked the tracking
+       survived Arabic. It is now a vector, so tracking is inside the artwork
+       and cannot be undone by a stylesheet — but the thing that assertion was
+       protecting still matters: the Latin mark must render identically in
+       Arabic, and must not be mirrored by RTL the way prose is. */
+    {
+      const mk = d.querySelector('.mark svg');
+      log(!!mk, 'AR the wordmark is the vector logo');
+      const box = mk.getBoundingClientRect();
+      log(box.width > 40 && box.height > 6, 'AR the wordmark still has real size in Arabic');
+      log(getComputedStyle(mk).transform.indexOf('-1') < 0,
+          'AR the wordmark is not mirrored by RTL — it is a name, not prose');
+    }
     log(d.querySelector('#progress').dir === 'ltr', 'AR progress bar stays LTR (it is a control)');
   }
 
@@ -2359,6 +2371,38 @@ window.addEventListener('unhandledrejection', e => {
     log(stages === 75, 'the sweep covers all 75 stages, not just the 45 numbered ones');
     log(errs.length === 0, 'all ' + stages +
         ' stages set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
+  }
+
+  /* ----------------------------------------- stylesheets: name collisions --
+     The Break puzzles are split across four stylesheets, and a class defined
+     in two of them silently resolves by load order. That has produced four
+     separate bugs already (brk-plate, brk-ball, brk-line, and brk-word, which
+     drew B13's word at 17px against its own 34px reflection). Catch the whole
+     class of it rather than the next instance. */
+  {
+    const files = ['styles.css', 'breaks2.css', 'breaks3.css', 'breaks4.css',
+                   'vault.css', 'recovery.css', 'invite.css', 'solved.css'];
+    const owners = {};
+    const clashes = [];
+    for (const f of files) {
+      const text = await (await fetch(f)).text();
+      /* bare single-class rules only: `.a.b` and `.a .b` are deliberate
+         qualifications, and媒 media-query duplicates inside one file are fine */
+      const seen = new Set();
+      const bare = text.replace(/\/\*[\s\S]*?\*\//g, '')
+        .match(/(^|[},])\s*(\.[a-zA-Z][\w-]*)\s*(?=[,{])/gm) || [];
+      bare.forEach(m => {
+        const cls = m.match(/\.[a-zA-Z][\w-]*/)[0];
+        seen.add(cls);
+      });
+      seen.forEach(cls => {
+        if (owners[cls] && owners[cls] !== f) clashes.push(cls + ' → ' + owners[cls] + ' and ' + f);
+        else owners[cls] = f;
+      });
+    }
+    log(clashes.length === 0,
+        'no bare class is defined in two stylesheets' +
+        (clashes.length ? ' → ' + clashes.slice(0, 6).join(' / ') : ''));
   }
 
   /* ------------------------------------------------ the finale's data --

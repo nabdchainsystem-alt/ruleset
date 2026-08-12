@@ -300,25 +300,35 @@ run, but not its input stack or its viewport behaviour.
 
 ## 6. Viewport matrix
 
-Automated overflow detection plus screenshots read by eye. No horizontal
-overflow is permitted anywhere: asserted as
-`document.documentElement.scrollWidth - clientWidth <= 1`.
+`node viewport-tests.mjs` — **600 stage renders**: every one of the 75 stages
+at every supported size, with **reduced motion forced on**. All clean.
 
-| Width × Height | Covered by | Verdict |
+A stage fails if the page scrolls sideways, the stage builds nothing, the
+recovery card appears, the instruction is empty (level 45 is deliberately
+silent), or the Hint button lands off-screen or below a usable size. When
+something does overflow the runner names the offending element rather than
+reporting "something overflows".
+
+| Width × Height | | Result |
 |---|---|---|
-| 375 × 667 | cross-engine ×3 + full 75-stage probe | **PASS** |
-| 390 × 844 | layout audit | **PASS** |
-| 430 × 932 | layout audit | **PASS** |
-| 820 × 1180 | layout audit | **PASS** |
-| 1024 × 768 | layout audit | **PASS** |
-| 1366 × 768 | layout audit | **PASS** |
-| 1440 × 900 | layout audit + full 75-stage probe | **PASS** |
-| 1920 × 1080 | layout audit | **PASS** |
-| 320 × 568 | not tested | **OUT OF SCOPE** — below the supported floor |
+| 1920 × 1080 | desktop | **75/75 clean** |
+| 1440 × 900 | laptop | **75/75 clean** |
+| 1366 × 768 | laptop | **75/75 clean** |
+| 1024 × 768 | tablet landscape | **75/75 clean** |
+| 820 × 1180 | tablet portrait | **75/75 clean** |
+| 430 × 932 | large phone | **75/75 clean** |
+| 390 × 844 | phone | **75/75 clean** |
+| 375 × 667 | small phone | **75/75 clean** |
+| 320 × 568 | — | **out of scope**, below the supported floor |
 
-375×667 additionally asserts that the Hint button stays reachable and the
-board keeps a usable width (> 200px), because "no overflow" can be satisfied
-by squeezing the game into something unplayable.
+Reduced motion is on for the whole sweep deliberately: two levels were once
+found *unsolvable* with it enabled, because their only clue was a shared pulse
+animation. Every stage now builds and renders with motion off.
+
+The stages that most needed this are the ones computing their own geometry —
+B09's clamped clusters, B12's centroid hit region, B10's stage-relative ball,
+B16's plate measured from its pads, B26's 0.19w slab spacing, B30's four fixed
+fractions, and the 29-tile Echo Memory Wall in level 45.
 
 ---
 

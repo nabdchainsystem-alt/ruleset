@@ -6,11 +6,10 @@
    level is solved. Two things were wrong with that. It covered the puzzle the
    player had just built, and it arrived before they had looked at it.
 
-   styles.css is deliberately NOT edited — it is owned elsewhere — so this
-   sheet is loaded after it and re-declares the same selectors at equal or
-   greater specificity. Every property the old block sets is re-set here
-   rather than left to cascade order alone, so the old rules can move around
-   in their file without changing what happens on screen.
+   The old rules were removed from styles.css rather than overridden here, so
+   these selectors have exactly one owner and load order decides nothing. A
+   duplicate class across two stylesheets is what drew B13's word at 17px
+   against its own 34px reflection; tests.html now fails on any such pair.
 
    Two rules govern the result.
 
@@ -31,8 +30,7 @@
 /* ---- the layer ---------------------------------------------------------- */
 /* `.solved.is-on` is matched alongside `.solved` so the old is-on rule (which
    makes the whole layer visible and clickable) is answered at equal weight. */
-.solved,
-.solved.is-on {
+.solved {
   position: absolute;
   inset: auto 0 0 0;                 /* the board's floor, under everything */
   display: flex;
@@ -47,8 +45,7 @@
 /* No room under the stage: dock to the window's floor instead, over the
    chrome bar — the only surface down there that is not the puzzle. Fixed, so
    this position cannot push the board around either. */
-.solved.is-docked,
-.solved.is-on.is-docked {
+.solved.is-docked {
   position: fixed;
   padding: 0;
 }
