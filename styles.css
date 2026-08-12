@@ -890,6 +890,11 @@ button { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The row must be allowed to wrap. Unwrapped, its min-content width is the
+     width of everything in it — and once the Vault icon and a carried Echo
+     Tray join the left group that exceeded the window somewhere under 700px,
+     which widened the whole app and silently clipped every level. */
+  flex-wrap: wrap;
   gap: 14px;
   padding: 14px 22px;
   border-top: 1px solid var(--line);
@@ -1782,6 +1787,18 @@ kbd {
 [dir="rtl"] .void { flex-direction: row; }
 
 /* -------------------------------------------------------------- responsive */
+
+/* Just above the phone breakpoint the desktop bottom bar still cannot fit one
+   line: level name + echo mark + tray + GLOBAL SEA + Vault, then six controls.
+   It wraps there rather than overflowing, so make that wrap deliberate — the
+   same two centred rows the phone gets, without the rest of the phone layout. */
+@media (min-width: 621px) and (max-width: 720px) {
+  .bottombar { gap: 10px; }
+  .bottom-right { order: 1; width: 100%; justify-content: center; flex-wrap: wrap; gap: 7px; }
+  .bottom-left { order: 2; width: 100%; justify-content: center; }
+  .bottom-sep { display: none; }
+}
+
 @media (max-width: 620px) {
   /* The control row outgrew the screen — Start over, Hint, Restart, Skip, the
      language toggle, the theme toggle, the GLOBAL SEA link and the echo mark

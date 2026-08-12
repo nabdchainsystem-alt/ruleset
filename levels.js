@@ -3099,16 +3099,28 @@ window.RULESET_LEVELS = [
     /* The Hint button becomes a physical object — but only because this level
        declared it in globalElementsAllowed and asked for it. borrow() puts it
        back in the bottom bar afterwards, styles and position intact. */
-    const hint = ctx.claim('hint', {});
+    let done = false, moved = false;
+
+    /* Claiming the button silences the engine's own handler, which would leave
+       this level's three hints authored and permanently unreachable. Hand a
+       plain press back to the hint ladder — a press that ended a drag is not a
+       press — and undo the disable the last hint sets, because a disabled
+       button cannot be picked up and the picking up is the whole level. */
+    const hint = ctx.claim('hint', {
+      onPress() {
+        if (done || moved) return;
+        window.RULESET.showHint();
+        hint.el.disabled = false;
+      }
+    });
     if (!hint) return;
     const held = ctx.borrow(hint.el);
     hint.el.classList.add('is-grabbable');
 
-    let done = false;
-
     ctx.drag(hint.el, {
       affordance: false, enabled: () => !done,
-      onGrab() { held.lift(); },
+      onGrab() { moved = false; held.lift(); },
+      onMove() { moved = true; },
       onDrop() {
         if (done || !ctx.hits(hint.el, target, -20)) return;
         done = true;

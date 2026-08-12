@@ -179,6 +179,41 @@ async function run(name, engine) {
   ok(await mp.locator('#btnHint').isVisible(), `${name}: the Hint button is reachable on a small phone`);
   ok(await mp.locator('#stage').evaluate(el => el.getBoundingClientRect().width) > 200,
      `${name}: the board keeps a usable width on a small phone`);
+
+  /* ---- touch, not mouse: this is how most people will actually play ----
+     The engine drags with Pointer Events and setPointerCapture, and the CSS
+     sets touch-action: none on anything draggable. Synthetic touchstart
+     events do NOT produce pointer events, so dispatching them would test
+     nothing; CDP's Input.dispatchTouchEvent goes in at the same level as a
+     real finger and the browser synthesises the pointer events itself.
+
+     CDP is Chromium-only. WebKit's touch path is therefore NOT covered here
+     and is recorded as an untested risk rather than quietly assumed to pass. */
+  if (name === 'chromium') {
+    const w2 = mp.locator('[data-word="end"]').first();
+    const d2 = mp.locator('#stage .dot');
+    const wa = await w2.boundingBox();
+    const db = await d2.boundingBox();
+    const cdp = await mp.context().newCDPSession(mp);
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: type === 'touchEnd' ? [] : [{ x, y, radiusX: 12, radiusY: 12, force: 1 }]
+    });
+    const scrollBefore = await mp.evaluate(() => window.scrollY);
+    const fx = wa.x + wa.width / 2, fy = wa.y + wa.height / 2;
+    const tx = db.x + db.width / 2, ty = db.y + db.height / 2;
+    await touch('touchStart', fx, fy);
+    for (let i = 1; i <= 12; i++) {
+      await touch('touchMove', fx + (tx - fx) * i / 12, fy + (ty - fy) * i / 12);
+      await mp.waitForTimeout(16);
+    }
+    await touch('touchEnd', tx, ty);
+    await mp.waitForTimeout(700);
+    ok(await mp.locator('#solved.is-on').count() === 1,
+       `${name}: level 1 is solvable by touch, not just by mouse`);
+    ok(await mp.evaluate(() => window.scrollY) === scrollBefore,
+       `${name}: dragging does not scroll the page out from under the player`);
+  }
   await phone.close();
 
   ok(noise.length === 0, `${name}: no console errors${noise.length ? ' → ' + noise.slice(0, 3).join(' | ') : ''}`);
