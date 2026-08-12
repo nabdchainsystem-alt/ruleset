@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" class="is-dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="GLOBAL SEA — every message is a floating object.">
+<title>GLOBAL SEA</title>
+<link rel="stylesheet" href="global.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2307080b'/><circle cx='16' cy='13' r='5' fill='%236f8dff'/><circle cx='11' cy='22' r='3' fill='%23fff' opacity='.5'/></svg>">
+</head>
+<body>
+
+<!-- ambient depth: two slow-drifting light fields -->
+<div class="ambient" aria-hidden="true"><i></i><i></i></div>
+
+<!-- tethers + archived debris live here, beneath the bubbles -->
+<canvas id="seaCanvas" aria-hidden="true"></canvas>
+
+<!-- live, readable messages -->
+<div id="seaDom" class="sea-dom"></div>
+
+<!-- ─────────────────────────────── head-up display ─────────────────────── -->
+<header class="hud hud-top">
+  <div class="hud-left">
+    <a class="brand" href="index.html" title="Back to RULESET">
+      <span class="brand-mark"></span>
+      <span class="brand-name">GLOBAL&nbsp;SEA</span>
+    </a>
+  </div>
+
+  <div class="hud-centre">
+    <div class="counter">
+      <span class="counter-num" id="countNum">0</span>
+      <span class="counter-word">messages alive</span>
+    </div>
+    <div class="rate-line">
+      <span id="rateNum">0.0</span> <span class="dim">messages / second</span>
+    </div>
+  </div>
+
+  <div class="hud-right">
+    <button class="pill" id="btnTheme" title="Light / dark">◐</button>
+    <button class="pill" id="btnPerf" title="Performance">
+      <span class="fps-dot" id="fpsDot"></span><span id="fpsNum">60</span>
+    </button>
+  </div>
+</header>
+
+<!-- ─────────────────────────────── demo controls ───────────────────────── -->
+<aside class="dock" id="dock">
+  <div class="dock-row">
+    <span class="dock-label">DEMO</span>
+    <button class="pill" id="btnPause">Pause</button>
+    <span class="sep"></span>
+    <button class="pill" data-add="1">+1</button>
+    <button class="pill" data-add="10">+10</button>
+    <button class="pill" data-add="100">+100</button>
+  </div>
+  <div class="dock-row">
+    <span class="dock-label">RATE</span>
+    <div class="seg" id="rateSeg">
+      <button data-rate="0" class="is-on">off</button>
+      <button data-rate="1">1</button>
+      <button data-rate="5">5</button>
+      <button data-rate="10">10</button>
+      <button data-rate="25">25</button>
+      <button data-rate="50">50</button>
+      <span class="seg-unit">/sec</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ─────────────────────────────── composer ────────────────────────────── -->
+<form class="composer" id="composer">
+  <input id="composerInput" type="text" maxlength="140" autocomplete="off"
+         placeholder="Say something to the world…">
+  <button type="submit" id="composerSend" title="Send">
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+      <path d="M4 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+</form>
+
+<!-- floating toolbar for the selected message -->
+<div class="tools" id="tools" hidden>
+  <button data-act="reply">Reply</button>
+  <button data-act="pin">Pin</button>
+  <button data-act="argue">Argue</button>
+</div>
+
+<!-- reply box, anchored to whatever it is replying to -->
+<form class="replybox" id="replybox" hidden>
+  <div class="replybox-to"><span id="replyTo"></span></div>
+  <input id="replyInput" type="text" maxlength="140" autocomplete="off" placeholder="Reply…">
+  <button type="submit">↑</button>
+</form>
+
+<!-- banners -->
+<div class="banner" id="argueBanner" hidden>
+  <span class="banner-dot"></span>
+  <span id="argueText">Argument in progress</span>
+  <button id="btnStopArgue">Stop</button>
+</div>
+
+<div class="banner is-warn" id="perfBanner" hidden></div>
+
+<div class="hintline" id="focusHint" hidden>Click empty water to leave this thread</div>
+
+<!-- ─────────────────────────────── dev panel ───────────────────────────── -->
+<section class="dev" id="dev" hidden>
+  <div class="dev-head">
+    <span>PUZZLE LAB · SEA</span>
+    <span class="dim">⌘/Ctrl + ⇧ + D</span>
+  </div>
+
+  <div class="dev-stats" id="devStats"></div>
+
+  <div class="dev-sliders" id="devSliders"></div>
+
+  <div class="dev-actions">
+    <button data-spawn="100">Spawn 100</button>
+    <button data-spawn="500">Spawn 500</button>
+    <button data-spawn="1000">Spawn 1000</button>
+    <button id="btnClear">Clear sea</button>
+    <button id="btnStress" class="is-primary">Start stress test</button>
+  </div>
+
+  <div class="dev-report" id="devReport" hidden></div>
+</section>
+
+<script src="physics.js"></script>
+<script src="messages.js"></script>
+<script src="simulation.js"></script>
+<script src="global.js"></script>
+</body>
+</html>

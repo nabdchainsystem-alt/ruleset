@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=10, user-scalable=yes">
+<meta name="description" content="RULESET — a puzzle game where the interface is the puzzle.">
+<title>RULESET</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="breaks2.css">
+<link rel="stylesheet" href="breaks3.css">
+<link rel="stylesheet" href="breaks4.css">
+<link rel="stylesheet" href="vault.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23111214'/><rect x='8' y='14.5' width='16' height='3' rx='1.5' fill='%23fff'/></svg>">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ─────────────── top chrome (also: fair game for puzzles) ─────────────── -->
+  <header class="topbar">
+    <div class="mark" id="mark">RULESET</div>
+
+    <!-- pinned LTR: it is a numeric control, and the level that takes it over
+         maps pointer X to value left-to-right in both languages -->
+    <div class="progress" id="progress" dir="ltr">
+      <div class="progress-track" id="progressTrack">
+        <div class="progress-ticks" id="progressTicks"></div>
+        <div class="progress-fill" id="progressFill"></div>
+        <div class="progress-knob" id="progressKnob"></div>
+      </div>
+    </div>
+
+    <button class="zoomchip" id="zoomChip" type="button" hidden dir="ltr"></button>
+
+    <div class="counter">
+      <span id="levelNum">01</span><span class="counter-sep">/</span><span id="levelTotal">15</span>
+    </div>
+  </header>
+
+  <!-- ─────────────── the board: instruction + stage ─────────────── -->
+  <main class="board" id="board">
+
+    <p class="instruction" id="instruction"></p>
+
+    <div class="stage" id="stage" aria-label="puzzle stage"></div>
+
+    <div class="underline-row">
+      <div class="status" id="status"></div>
+      <div class="hintline" id="hintline"></div>
+    </div>
+
+    <!-- discard tray: appears while dragging something discardable -->
+    <div class="void" id="void">
+      <span class="void-label" id="voidLabel">drop to remove</span>
+      <div class="void-items" id="voidItems"></div>
+    </div>
+
+    <!-- free layer: anything dragged out of normal flow lives here -->
+    <div class="loose" id="loose"></div>
+
+    <!-- success -->
+    <div class="solved" id="solved" aria-live="polite">
+      <div class="solved-ring"></div>
+      <div class="solved-inner">
+        <div class="solved-word" id="solvedWord">SOLVED</div>
+        <div class="solved-sub" id="solvedSub"></div>
+        <button class="btn btn-primary" id="btnNext">Next</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ─────────────── bottom chrome ─────────────── -->
+  <footer class="bottombar">
+    <div class="bottom-left">
+      <span class="level-name" id="levelName"></span>
+      <!-- Season II: two tokens, same place every level. Decorative until it
+           isn't. Rendered by the engine so its position can never drift. -->
+      <!-- pinned LTR: a mark is an ordered [row, column] pair, not prose. RTL
+           would mirror the two tokens and the same mark would read backwards
+           in Arabic. Same reasoning as the progress bar above. -->
+      <span class="echo-mark" id="echoMark" hidden aria-hidden="true" dir="ltr"></span>
+      <!-- tokens the player is carrying. Persistent, and pointedly unexplained. -->
+      <span class="echo-tray" id="echoTray" hidden dir="ltr"></span>
+      <a class="sea-link" href="global.html" title="GLOBAL SEA — every message is a floating object">
+        <span class="sea-dot" aria-hidden="true"></span>GLOBAL SEA
+      </a>
+    </div>
+    <div class="bottom-right">
+      <button class="btn btn-quiet" id="btnReset" title="Erase all progress and go back to level 1">Start over</button>
+      <span class="bottom-sep" aria-hidden="true"></span>
+      <button class="btn" id="btnHint">Hint</button>
+      <button class="btn" id="btnRestart">Restart</button>
+      <button class="btn btn-quiet" id="btnSkip" title="Move on without solving this one">Skip</button>
+      <button class="btn btn-lang" id="btnLang" lang="ar" title="Switch to Arabic">عربي</button>
+      <button class="btn btn-icon" id="btnTheme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </div>
+  </footer>
+
+  <!-- ─────────────── developer mode (backtick, or ?dev=1) ─────────────── -->
+  <div class="dev" id="dev" hidden>
+    <div class="dev-head">
+      <span class="dev-title" id="devTitle">DEV</span>
+      <span class="dev-hint" id="devClose">press <kbd>`</kbd> to close</span>
+    </div>
+    <div class="dev-grid" id="devGrid"></div>
+    <div class="dev-actions">
+      <button class="btn btn-sm" id="devUnlock">Unlock all</button>
+      <button class="btn btn-sm" id="devSolve">Solve level</button>
+      <button class="btn btn-sm" id="devWipe">Wipe progress</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="i18n.js"></script>
+<script src="state.js"></script>
+<script src="echo.js"></script>
+<script src="echo-ui.js"></script>
+<script src="levels.js"></script>
+<script src="breaks.js"></script>
+<script src="breaks2.js"></script>
+<script src="breaks3.js"></script>
+<script src="breaks4.js"></script>
+<script src="route.js"></script>
+<script src="game.js"></script>
+<script src="lab.js"></script>
+<script src="vault.js"></script>
+</body>
+</html>

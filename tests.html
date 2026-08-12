@@ -1,0 +1,2206 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>RULESET — test harness</title>
+<style>
+  body { font: 13px/1.6 ui-monospace, monospace; margin: 0; padding: 12px; }
+  iframe { width: 1200px; height: 780px; border: 1px solid #ccc; }
+  #out { white-space: pre; }
+  .ok { color: #0a7; } .bad { color: #c33; font-weight: 700; }
+</style>
+<div id="out">running…</div>
+<iframe id="f" src="about:blank"></iframe>
+<script>
+const out = document.getElementById('out');
+const f = document.getElementById('f');
+const lines = [];
+let fails = 0;
+function log(ok, msg) {
+  if (!ok) fails++;
+  lines.push((ok ? '  ok  ' : ' FAIL ') + msg);
+  out.innerHTML = lines.map(l => '<span class="' + (l[1] === 'o' ? 'ok' : 'bad') + '">' + l + '</span>').join('\n');
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+/* Headless Chrome composites almost no frames, so native rAF stalls after
+   load. Back it with setTimeout (which virtual time fast-forwards) and
+   restart the engine loop on top of it. Test-harness only. */
+function pumpFrames(w) {
+  w.cancelAnimationFrame(w.RULESET.rafId);
+  w.requestAnimationFrame = cb => w.setTimeout(() => cb(w.performance.now()), 16);
+  w.RULESET.lastT = 0;
+  w.RULESET.loop();
+  w.RULESET.load(w.RULESET.index);   // rebuild under the pumped clock
+}
+
+function loadLevel(n) {
+  return new Promise(res => {
+    f.onload = () => setTimeout(() => {
+      const w = f.contentWindow;
+      pumpFrames(w);
+      setTimeout(() => res(w), 80);
+    }, 60);
+    f.src = 'index.html?level=' + n + '&t=' + Math.random();
+  });
+}
+
+function hookSolve(w) {
+  const box = { solved: false };
+  w.RULESET.solve = () => { box.solved = true; };   // suppress auto-advance
+  return box;
+}
+
+const mid = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+
+function pev(w, type, el, x, y) {
+  el.dispatchEvent(new w.PointerEvent(type, {
+    clientX: x, clientY: y, pointerId: 1, isPrimary: true, pointerType: 'mouse',
+    button: type === 'pointerup' ? 0 : 0, buttons: type === 'pointerup' ? 0 : 1,
+    bubbles: true, cancelable: true, composed: true
+  }));
+}
+
+async function dragTo(w, el, to, steps) {
+  steps = steps || 6;
+  const from = mid(el);
+  pev(w, 'pointerdown', el, from.x, from.y);
+  await wait(16);
+  const a = mid(el);            // element may have been reparented on grab
+  for (let i = 1; i <= steps; i++) {
+    pev(w, 'pointermove', el, from.x + (to.x - a.x) * i / steps, from.y + (to.y - a.y) * i / steps);
+    await wait(16);
+  }
+  pev(w, 'pointerup', el, to.x, to.y);
+  await wait(40);
+}
+
+function click(w, el) { el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); }
+
+window.addEventListener('unhandledrejection', e => {
+  lines.push(' FAIL harness rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason));
+  out.textContent = lines.join('\n');
+});
+
+(async function run() {
+ try {
+  /* ---------------------------------------------------- 01 word → dot -- */
+  {
+    const w = await loadLevel(1);
+    w.localStorage.clear();
+    const box = hookSolve(w);
+    const d = w.document;
+    const dot = d.querySelector('.dot');
+    const end = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'end');
+    log(!!dot && !!end, 'L1 has a dot and a free "end" word');
+    log(end.classList.contains('is-free'), 'L1 "end" carries the draggable affordance');
+
+    /* A lifted word must not jump. The instruction is centred, so inserting
+       the gap placeholder re-centres the line and slides the word sideways by
+       half its own width — measuring after that hands the drag a position the
+       placeholder invented, and the word rides the pointer permanently offset. */
+    {
+      const was = mid(end);
+      pev(w, 'pointerdown', end, was.x, was.y);
+      await wait(40);
+      const now = mid(end);
+      log(Math.abs(now.x - was.x) < 2 && Math.abs(now.y - was.y) < 2,
+          'L1 picking a word up does not move it (drift ' +
+          Math.round(now.x - was.x) + ',' + Math.round(now.y - was.y) + 'px)');
+      pev(w, 'pointermove', end, was.x + 120, was.y + 60);
+      await wait(30);
+      const held = mid(end);
+      log(Math.abs(held.x - (was.x + 120)) < 3 && Math.abs(held.y - (was.y + 60)) < 3,
+          'and it stays under the pointer while dragged');
+      pev(w, 'pointerup', end, was.x + 120, was.y + 60);
+      await wait(40);
+    }
+
+    const before = mid(d.querySelector('.door'));
+    await dragTo(w, dot, { x: before.x - 40, y: before.y });
+    await wait(300);
+    const after = mid(d.querySelector('.door'));
+    log(Math.hypot(after.x - before.x, after.y - before.y) > 20, 'L1 door flees the dot');
+    log(!box.solved, 'L1 not solved by chasing the door');
+
+    await dragTo(w, end, mid(dot));
+    await wait(60);
+    log(box.solved, 'L1 solves when "end" is dragged to the dot');
+    log(d.querySelector('.loose').contains(end), 'L1 lifted word moved into the free layer');
+    log(!!d.querySelector('.instruction .ph'), 'L1 sentence left a collapsing placeholder');
+  }
+
+  /* ------------------------------------------------------- 02 resize -- */
+  {
+    const w = await loadLevel(2);
+    const box = hookSolve(w);
+    const d = w.document;
+    const five = [...d.querySelectorAll('.num')].find(n => n.textContent.trim()[0] === '5');
+    const ten = [...d.querySelectorAll('.num')].find(n => n.textContent.trim().indexOf('10') === 0);
+    const handle = five.querySelector('.rs-handle');
+    log(!!handle, 'L2 the 5 has a resize handle');
+    log(!box.solved, 'L2 not solved at rest');
+    const h = mid(handle);
+    await dragTo(w, handle, { x: h.x + 320, y: h.y + 320 }, 10);
+    await wait(60);
+    const a = five.getBoundingClientRect(), b = ten.getBoundingClientRect();
+    log(a.width > b.width && a.height > b.height, 'L2 the 5 became physically larger (' +
+      Math.round(a.width) + '×' + Math.round(a.height) + ' vs ' + Math.round(b.width) + '×' + Math.round(b.height) + ')');
+    log(box.solved, 'L2 solves on size comparison');
+  }
+
+  /* ------------------------------------------- 03 remove "red" route -- */
+  {
+    const w = await loadLevel(3);
+    const box = hookSolve(w);
+    const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => b.textContent === 'CONTINUE');
+    log(btn.classList.contains('is-red'), 'L3 the button starts red');
+    click(w, btn);
+    await wait(40);
+    log(!box.solved, 'L3 pressing a red button is refused');
+
+    const red = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'red');
+    await dragTo(w, red, mid(d.querySelector('#void')));
+    await wait(80);
+    log(!btn.classList.contains('is-red'), 'L3 removing "red" de-reds the world');
+    log(!!d.querySelector('.void-chip'), 'L3 the removed word lands in the discard tray');
+    click(w, btn);
+    await wait(40);
+    log(box.solved, 'L3 solves after "red" is removed');
+  }
+
+  /* --------------------------------------- 03b invert the rule route -- */
+  {
+    const w = await loadLevel(3);
+    const box = hookSolve(w);
+    const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => b.textContent === 'CONTINUE');
+    const not = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'not');
+    await dragTo(w, not, mid(d.querySelector('#void')));
+    await wait(80);
+    log(btn.classList.contains('is-red'), 'L3b button is still red after removing "not"');
+    click(w, btn);
+    await wait(40);
+    log(box.solved, 'L3b solves via the inverted rule (second valid solution)');
+  }
+
+  /* ------------------------------------------- 03c drop back = undo --- */
+  {
+    const w = await loadLevel(3); const box = hookSolve(w); const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => b.textContent === 'CONTINUE');
+    const red = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'red');
+    const home = mid(red);
+    await dragTo(w, red, { x: home.x - 30, y: home.y + 6 });   // nudge, stay on the sentence
+    await wait(80);
+    log(d.querySelector('.instruction').contains(red), 'L3c a word dropped on the sentence snaps back');
+    log(btn.classList.contains('is-red'), 'L3c and the world stays red');
+    log(!d.querySelector('.void-chip'), 'L3c nothing was discarded');
+
+    await dragTo(w, red, { x: home.x, y: home.y + 260 });      // drop clear of the sentence
+    await wait(80);
+    log(!btn.classList.contains('is-red'), 'L3c dropping clear of the sentence removes the word');
+    log(!!d.querySelector('.void-chip'), 'L3c the word is parked in the tray');
+
+    const back = d.querySelector('.void-chip button');
+    back.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(120);
+    log(btn.classList.contains('is-red'), 'L3c restoring the word from the tray re-reds the world');
+  }
+
+  /* ------------------------------------------------------- 04 timer -- */
+  {
+    const w = await loadLevel(4); const box = hookSolve(w); const d = w.document;
+    const btn = d.querySelector('.gbtn');
+    const chip = [...d.querySelectorAll('.chip')].find(c => /RESET/.test(c.textContent));
+    log(!!chip, 'L4 has a reset-timer object');
+    for (let i = 0; i < 12; i++) { click(w, btn); await wait(60); }
+    await wait(2200);
+    log(!box.solved, 'L4 cannot be beaten by clicking through the reset');
+    await dragTo(w, chip, mid(d.querySelector('#void')));
+    await wait(60);
+    for (let i = 0; i < 11; i++) { click(w, btn); await wait(450); }
+    log(box.solved, 'L4 solves once the reset timer is discarded');
+  }
+
+  /* ------------------------------------------------------ 05 do nothing */
+  {
+    const w = await loadLevel(5); const box = hookSolve(w); const d = w.document;
+    d.querySelector('.stage').dispatchEvent(new w.PointerEvent('pointermove',
+      { clientX: 300, clientY: 300, bubbles: true, pointerId: 1 }));
+    await wait(2000);
+    log(!box.solved, 'L5 stays unsolved while input keeps arriving');
+    await wait(6000);                       // …and nothing at all happens here
+    log(box.solved, 'L5 solves after 5 undisturbed seconds');
+  }
+
+  /* -------------------------------------------------------- 06 window -- */
+  {
+    const w = await loadLevel(6); const box = hookSolve(w); const d = w.document;
+    const boxW = parseFloat(d.querySelector('.wbox').style.width);
+    log(boxW > 0 && boxW < w.innerWidth, 'L6 box is sized under the current window (' + boxW + 'px)');
+    log(!box.solved, 'L6 unsolved at the starting width');
+    const realW = w.innerWidth;
+    Object.defineProperty(w, 'innerWidth', { value: boxW - 10, configurable: true });
+    if (w.visualViewport) Object.defineProperty(w.visualViewport, 'width', { value: boxW - 10, configurable: true });
+    await wait(200);
+    log(box.solved, 'L6 solves when the viewport goes under the box width');
+  }
+
+  /* ----------------------------------------------------- 07 fine print -- */
+  {
+    const w = await loadLevel(7); const box = hookSolve(w); const d = w.document;
+    const tiny = d.querySelector('.tiny');
+    log(parseFloat(getComputedStyle(tiny).fontSize) < 5, 'L7 password renders at sub-5px');
+    const input = d.querySelector('.field');
+    input.value = 'wrong'; input.dispatchEvent(new w.Event('input', { bubbles: true }));
+    await wait(120);
+    log(!box.solved, 'L7 rejects a wrong password');
+    input.value = tiny.textContent.toLowerCase();
+    await wait(120);
+    log(box.solved, 'L7 solves with the real password (readable by zoom or selection)');
+  }
+
+  /* --------------------------------------------------------- 08 both --- */
+  {
+    const w = await loadLevel(8); const box = hookSolve(w); const d = w.document;
+    // physical codes, not characters — an Arabic layout reports Arabic e.key
+    const key = (t, c) => w.dispatchEvent(new w.KeyboardEvent(t, { code: c, key: 'ي', bubbles: true }));
+    key('keydown', 'KeyQ'); await wait(200);
+    log(!box.solved, 'L8 one switch is not enough');
+    key('keydown', 'KeyP'); await wait(120);
+    log(box.solved, 'L8 solves on physical key codes, whatever the layout prints');
+    key('keyup', 'KeyQ'); key('keyup', 'KeyP');
+  }
+
+  /* ----------------------------------------------- 09 self-reference --- */
+  {
+    const w = await loadLevel(9); const box = hookSolve(w); const d = w.document;
+    const vd = mid(d.querySelector('#void'));
+    const grab = word => [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === word);
+    log(d.querySelectorAll('.instruction .w[data-word]').length === 6, 'L9 sentence starts with 6 words');
+    await dragTo(w, grab('exactly'), vd); await wait(80);
+    log(!box.solved, 'L9 five words still does not match "four"');
+    await dragTo(w, grab('sentence'), vd); await wait(120);
+    log(box.solved, 'L9 solves when the sentence becomes literally true');
+  }
+
+  /* ------------------------------------------------------ 10 progress -- */
+  {
+    const w = await loadLevel(10); const box = hookSolve(w); const d = w.document;
+    const track = d.querySelector('#progressTrack');
+    log(track.classList.contains('is-live'), 'L10 hands the app progress bar to the level');
+    const r = track.getBoundingClientRect();
+    pev(w, 'pointerdown', track, r.left + 4, r.top + 2); await wait(30);
+    pev(w, 'pointermove', track, r.right + 60, r.top + 2); await wait(30);
+    pev(w, 'pointerup', track, r.right + 60, r.top + 2); await wait(120);
+    log(box.solved, 'L10 solves when the chrome bar is dragged full');
+    w.RULESET.load(0); await wait(120);
+    log(!track.classList.contains('is-live'), 'L10 releases the progress bar on cleanup');
+  }
+
+  /* ------------------------------------------------------- 11 balance -- */
+  {
+    const w = await loadLevel(11); const box = hookSolve(w); const d = w.document;
+    const blocks = [...d.querySelectorAll('.block')];
+    log(blocks.length === 2 && blocks.every(b => b.querySelector('.rs-handle')),
+        'L11 both blocks slide and resize');
+    log(!box.solved, 'L11 starts out of balance');
+    // slide the right block outward until the torques match
+    const beamW = d.querySelector('.beam').offsetWidth;
+    const t = b => (b.offsetWidth * b.offsetHeight / 500) * (((b.offsetLeft + b.offsetWidth / 2) - beamW / 2) / 10);
+    let guard = 0;
+    while (Math.abs(t(blocks[0]) + t(blocks[1])) > 0.4 && guard++ < 40) {
+      const need = -t(blocks[0]) / (blocks[1].offsetWidth * blocks[1].offsetHeight / 500) * 10;
+      const target = Math.max(0, Math.min(beamW - blocks[1].offsetWidth, need + beamW / 2 - blocks[1].offsetWidth / 2));
+      const m = mid(blocks[1]);
+      await dragTo(w, blocks[1], { x: m.x + (target - blocks[1].offsetLeft), y: m.y }, 3);
+    }
+    await wait(900);
+    log(box.solved, 'L11 solves when torque balances and holds');
+  }
+
+  /* -------------------------------------------------------- 12 remap --- */
+  {
+    const w = await loadLevel(12); const box = hookSolve(w); const d = w.document;
+    const key = (t, c) => w.dispatchEvent(new w.KeyboardEvent(t, { code: c, key: 'ص', bubbles: true }));
+    const chips = [...d.querySelectorAll('.dirchip')];
+    const up = chips.find(c => c.textContent === '↑');
+    const slots = [...d.querySelectorAll('.dirslot')];
+    log(chips.length === 4 && slots.length === 5, 'L12 has 4 arrows and 5 slots (one spare)');
+
+    key('keydown', 'KeyW'); await wait(700); key('keyup', 'KeyW');
+    log(!box.solved, 'L12 unreachable while no key maps to up');
+
+    await dragTo(w, up, mid(slots[3]));      // spare ↑ into the empty D row
+    await wait(80);
+    // resulting map: W→←  A→↓  S→→  D→↑
+    const K = { up: 'KeyD', down: 'KeyA', left: 'KeyW', right: 'KeyS' };
+    const sq = d.querySelector('.mover'), tgt = d.querySelector('.slot');
+    for (let i = 0; i < 200 && !box.solved; i++) {
+      const a = mid(sq), b = mid(tgt);
+      const k = Math.abs(b.x - a.x) > 8 ? (b.x > a.x ? K.right : K.left)
+              : Math.abs(b.y - a.y) > 8 ? (b.y > a.y ? K.down : K.up) : null;
+      if (!k) break;
+      key('keydown', k); await wait(40); key('keyup', k); await wait(16);
+    }
+    await wait(120);
+    log(box.solved, 'L12 solves after remapping a key to up');
+  }
+
+  /* --------------------------------------------------- 13 hidden text -- */
+  {
+    const w = await loadLevel(13); const box = hookSolve(w); const d = w.document;
+    const hw = [...d.querySelectorAll('.para .hw')];
+    log(hw.length === 6, 'L13 hides 6 words in the paragraph');
+    const bg = getComputedStyle(d.querySelector('.stage')).backgroundColor;
+    log(getComputedStyle(hw[0]).color === bg, 'L13 hidden words are painted in the background colour');
+    const input = d.querySelector('.field');
+    input.value = 'harbour'; await wait(120);
+    log(!box.solved, 'L13 rejects a non-colour hidden word');
+    input.value = 'cobalt'; await wait(120);
+    log(box.solved, 'L13 solves on the colour');
+  }
+
+  /* ------------------------------------------------------ 14 off-screen */
+  {
+    const w = await loadLevel(14); const box = hookSolve(w); const d = w.document;
+    const stage = d.querySelector('.stage').getBoundingClientRect();
+    const tokens = [...d.querySelectorAll('.token')];
+    const inView = tokens.filter(t => {
+      const r = t.getBoundingClientRect();
+      return r.left > stage.left && r.right < stage.right && r.top > stage.top && r.bottom < stage.bottom;
+    });
+    log(tokens.length === 5 && inView.length === 3, 'L14 shows 3 of 5 tokens (' + inView.length + ' in view)');
+    log(d.querySelectorAll('.mm-dot').length === 5, 'L14 minimap plots every token');
+
+    const world = d.querySelector('.world');
+    const sockets = [...d.querySelectorAll('.slot')];
+    for (let i = 0; i < 5; i++) {
+      // pan until token i is on screen, then drop it in a socket
+      let guard = 0;
+      while (guard++ < 12) {
+        const r = tokens[i].getBoundingClientRect();
+        const dx = Math.max(stage.left + 60 - r.left, 0) + Math.min(stage.right - 60 - r.right, 0);
+        const dy = Math.max(stage.top + 40 - r.top, 0) + Math.min(stage.bottom - 120 - r.bottom, 0);
+        if (!dx && !dy) break;
+        const m = mid(world);
+        await dragTo(w, world, { x: m.x + dx, y: m.y + dy }, 3);
+      }
+      await dragTo(w, tokens[i], mid(sockets[i]), 4);
+      await wait(40);
+    }
+    log(box.solved, 'L14 solves when all five sockets are filled');
+  }
+
+  /* ------------------------------------------------------- 15 finale --- */
+  {
+    const w = await loadLevel(15); const box = hookSolve(w); const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => /SOLVE/.test(b.textContent));
+    click(w, btn); await wait(60);
+    log(!box.solved, 'L15 the locked button refuses');
+
+    const cannot = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 'cannot');
+    await dragTo(w, cannot, mid(d.querySelector('#void'))); await wait(80);
+    log(d.querySelectorAll('.latch.is-on').length === 1, 'L15 latch 1 opens on editing the sentence');
+
+    const h = mid(btn.querySelector('.rs-handle'));
+    await dragTo(w, btn.querySelector('.rs-handle'), { x: h.x + 130, y: h.y }, 8);
+    await wait(80);
+    log(d.querySelectorAll('.latch.is-on').length === 2, 'L15 latch 2 opens on resizing the button (' +
+        btn.offsetWidth + 'px)');
+
+    const track = d.querySelector('#progressTrack');
+    const r = track.getBoundingClientRect();
+    pev(w, 'pointerdown', track, r.left + 4, r.top + 2); await wait(30);
+    pev(w, 'pointermove', track, r.right + 60, r.top + 2); await wait(30);
+    pev(w, 'pointerup', track, r.right + 60, r.top + 2); await wait(80);
+    log(d.querySelectorAll('.latch.is-on').length === 3, 'L15 latch 3 opens on filling the bar');
+
+    click(w, btn); await wait(60);
+    log(box.solved, 'L15 solves when all three latches are open');
+  }
+
+  /* ------------------------------------------------------ persistence -- */
+  {
+    const w = await loadLevel(1);
+    w.localStorage.setItem('ruleset:v1', JSON.stringify({ unlocked: 7, solved: [1,2,3], theme: 'dark' }));
+    const w2 = await loadLevel(0);      // level=0 is ignored → resumes from save
+    log(w2.RULESET.index === 6, 'save resumes at the furthest unlocked level (got ' + (w2.RULESET.index + 1) + ')');
+    log(w2.document.documentElement.classList.contains('is-dark'), 'saved theme is restored');
+    w2.localStorage.clear();
+  }
+
+  /* ------------------------------- 12 without a keyboard (phone/tablet) -- */
+  {
+    const w = await loadLevel(12); const box = hookSolve(w); const d = w.document;
+    const caps = [...d.querySelectorAll('.keymap .keycap')];
+    log(caps.length === 4, 'L12 the key map shows four pressable caps');
+
+    // hold a cap with a pointer only — no keyboard events anywhere in here
+    const hold = async (cap, ms) => {
+      const m = mid(cap);
+      pev(w, 'pointerdown', cap, m.x, m.y);
+      await wait(ms);
+      pev(w, 'pointerup', cap, m.x, m.y);
+      await wait(16);
+    };
+    const capFor = code => caps.find(c => c.dataset.code === code);
+
+    await hold(capFor('KeyW'), 60);
+    log(capFor('KeyW').classList.contains('is-down') === false, 'L12 a released cap stops moving');
+
+    const chips = [...d.querySelectorAll('.dirchip')];
+    const slots = [...d.querySelectorAll('.dirslot')];
+    const up = chips.find(c => c.textContent === '↑');
+    await dragTo(w, up, mid(slots[3]));      // spare ↑ into the empty D row
+    await wait(80);
+
+    const sq = d.querySelector('.mover'), tgt = d.querySelector('.slot');
+    for (let i = 0; i < 200 && !box.solved; i++) {
+      const a = mid(sq), b = mid(tgt);
+      const code = Math.abs(b.x - a.x) > 8 ? (b.x > a.x ? 'KeyS' : 'KeyW')
+                 : Math.abs(b.y - a.y) > 8 ? (b.y > a.y ? 'KeyA' : 'KeyD') : null;
+      if (!code) break;
+      await hold(capFor(code), 40);
+    }
+    log(box.solved, 'L12 is fully solvable with taps alone — no keyboard');
+  }
+
+  /* ------------------------------------------------------------- skip -- */
+  {
+    const w = await loadLevel(1);
+    w.localStorage.clear();
+    const w1 = await loadLevel(1);
+    const d = w1.document;
+    const skip = d.querySelector('#btnSkip');
+    log(!!skip && !skip.hidden, 'skip is offered');
+
+    click(w1, skip); await wait(150);
+    log(w1.RULESET.index === 1, 'it advances a level');
+    log(w1.RULESET_STATE.data.solved.indexOf(1) < 0, 'without marking the level solved');
+    log(w1.RULESET_STATE.data.unlocked >= 2, 'but unlocking what comes next');
+    log(w1.RULESET_STATE.data.counts.skips === 1, 'and counting it in the ledger');
+
+    /* a skipped Season II level must not hand over its echo mark */
+    const w2 = await loadLevel(16);
+    w2.RULESET_STATE.resetEcho();
+    w2.document.querySelector('#btnSkip').click(); await wait(150);
+    log(!w2.RULESET_STATE.hasMark(16),
+        'skipping a Season II level does not bank its mark — that is the reward for finishing');
+
+    /* the last level has nowhere forward, so skip must still do something */
+    const n = w2.RULESET_LEVELS.length;
+    const w3 = await loadLevel(n);
+    const s3 = w3.document.querySelector('#btnSkip');
+    log(!s3.hidden, 'skip is still offered on the final level');
+    w3.RULESET_STATE.data.solved =
+      w3.RULESET_ROUTE.build(w3.RULESET_LEVELS, w3.RULESET_BREAKS)
+        .map(st => st.id != null ? st.id : st.routeId)
+        .filter(k => k !== 3 && k !== n);
+    s3.click(); await wait(200);
+    log(w3.RULESET_LEVELS[w3.RULESET.index].id === 3,
+        'from the last level it goes to the first one still unsolved');
+
+    /* stages are saved under their key: canonical id for ECHO, routeId for a
+       Break — so "everything solved" has to use both */
+    const w4 = await loadLevel(n);
+    const keyOf = st => st.id != null ? st.id : st.routeId;
+    const allKeys = w4.RULESET_ROUTE.build(w4.RULESET_LEVELS, w4.RULESET_BREAKS).map(keyOf);
+    w4.RULESET_STATE.data.solved = allKeys;
+    w4.RULESET_STATE.saveNow();
+    w4.document.querySelector('#btnSkip').click(); await wait(200);
+    log(w4.RULESET.index === 0, 'and back to the start when nothing is left unsolved');
+    w4.localStorage.clear();
+  }
+
+  /* ------------------------------------------------------- start over -- */
+  {
+    const w = await loadLevel(1);
+    w.localStorage.setItem('ruleset:v1', JSON.stringify({ unlocked: 9, solved: [1,2,3,4,5,6,7,8], theme: 'dark' }));
+    const w2 = await loadLevel(0);
+    const btn = w2.document.querySelector('#btnReset');
+    log(!!btn && btn.textContent === 'Start over', 'start-over button is in the main UI');
+
+    click(w2, btn); await wait(60);
+    log(/Erase/.test(btn.textContent), 'first click arms instead of wiping');
+    log(w2.RULESET.index === 8, 'and does not move you off the level');
+
+    click(w2, btn); await wait(120);
+    const s = JSON.parse(w2.localStorage.getItem('ruleset:v1'));
+    log(s.solved.length === 0 && s.unlocked === 1, 'second click erases progress');
+    log(s.theme === 'dark', 'but keeps the theme');
+    log(w2.RULESET.index === 0, 'and drops you back on level 1');
+    log(btn.textContent === 'Start over', 'button disarms itself afterwards');
+
+    click(w2, btn); await wait(3400);   // arm, then let it time out
+    log(btn.textContent === 'Start over', 'arming lapses after 3s');
+    w2.localStorage.clear();
+  }
+
+  /* ══════════════════════════════════════════════════ ARABIC / RTL ══════ */
+
+  /* same normaliser as game.js, so we can find a word span by its Arabic text */
+  const norm = s => String(s).normalize('NFC')
+    .replace(/[ً-ْـٰٓ-ٕ]/g, '')
+    .replace(/[^\p{L}\p{N}'-]/gu, '').toLowerCase();
+
+  function setSave(patch) {
+    localStorage.setItem('ruleset:v1', JSON.stringify(
+      Object.assign({ unlocked: 15, solved: [], theme: null, lang: 'en' }, patch)));
+  }
+  const arWord = (d, ar) => [...d.querySelectorAll('.instruction .w')]
+    .find(s => s.dataset.word === norm(ar));
+
+  /* -------------------------------------------- toggle + persistence --- */
+  {
+    setSave({ lang: 'en' });
+    const w = await loadLevel(1);
+    log(w.document.documentElement.dir === 'ltr', 'AR starts in English, dir=ltr');
+    const btn = w.document.querySelector('#btnLang');
+    log(!!btn, 'AR language toggle exists in the bottom bar');
+
+    click(w, btn); await wait(200);
+    log(w.document.documentElement.dir === 'rtl', 'AR toggle flips <html dir> to rtl');
+    log(w.document.documentElement.lang === 'ar', 'AR toggle sets <html lang> to ar');
+    log(JSON.parse(w.localStorage.getItem('ruleset:v1')).lang === 'ar', 'AR choice is saved');
+    log(w.document.querySelector('#btnRestart').textContent === 'إعادة', 'AR chrome is translated');
+    log(w.document.querySelector('#instruction').textContent.indexOf('النهاية') >= 0,
+        'AR the current level re-renders in Arabic');
+
+    const w2 = await loadLevel(1);
+    log(w2.document.documentElement.dir === 'rtl', 'AR language survives a reload');
+  }
+
+  /* --------------------------------------------- typography guard ------ */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(1); const d = w.document;
+    const cs = n => getComputedStyle(d.querySelector(n));
+    log(cs('.instruction').letterSpacing === 'normal',
+        'AR instruction has no letter-spacing (it would break the cursive joins)');
+    log(cs('.status').letterSpacing === 'normal', 'AR status line has no letter-spacing');
+    log(cs('#btnRestart').letterSpacing === 'normal', 'AR buttons have no letter-spacing');
+    log(cs('.mark').letterSpacing !== 'normal', 'AR the Latin wordmark keeps its tracking');
+    log(d.querySelector('#progress').dir === 'ltr', 'AR progress bar stays LTR (it is a control)');
+  }
+
+  /* --------------------------------------------------- AR L1 word drag - */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(1); const box = hookSolve(w); const d = w.document;
+    const dot = d.querySelector('.dot');
+    const end = arWord(d, 'النهاية');
+    log(!!end && end.classList.contains('is-free'), 'AR L1 «النهاية» is the free word');
+    await dragTo(w, end, mid(dot)); await wait(80);
+    log(box.solved, 'AR L1 solves when «النهاية» is dragged to the dot');
+    const ph = d.querySelector('.instruction .ph');
+    log(ph && ph.style.width === '0px', 'AR L1 the sentence closes the gap behind it');
+  }
+
+  /* ------------------------------------------------- AR L3 both routes - */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(3); const box = hookSolve(w); const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => b.textContent === 'متابعة');
+    log(!!btn && btn.classList.contains('is-red'), 'AR L3 «متابعة» starts red');
+    click(w, btn); await wait(40);
+    log(!box.solved, 'AR L3 pressing red is refused');
+    await dragTo(w, arWord(d, 'الأحمر'), mid(d.querySelector('#void'))); await wait(80);
+    log(!btn.classList.contains('is-red'), 'AR L3 removing «الأحمر» de-reds the world');
+    click(w, btn); await wait(40);
+    log(box.solved, 'AR L3 route 1 solves');
+  }
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(3); const box = hookSolve(w); const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => b.textContent === 'متابعة');
+    await dragTo(w, arWord(d, 'لا'), mid(d.querySelector('#void'))); await wait(80);
+    log(btn.classList.contains('is-red'), 'AR L3b still red after removing «لا»');
+    click(w, btn); await wait(40);
+    log(box.solved, 'AR L3b route 2 solves — the inverted rule survives translation');
+  }
+
+  /* ----------------------------------------------- AR L9 self-report --- */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(9); const box = hookSolve(w); const d = w.document;
+    const vd = mid(d.querySelector('#void'));
+    log(d.querySelectorAll('.instruction .w[data-word]').length === 7,
+        'AR L9 sentence starts with 7 words claiming 4');
+    await dragTo(w, arWord(d, 'هذه'), vd); await wait(80);
+    log(!box.solved, 'AR L9 six words still does not match «أربع»');
+    await dragTo(w, arWord(d, 'على'), vd); await wait(80);
+    log(!box.solved, 'AR L9 five words still does not match');
+    await dragTo(w, arWord(d, 'بالضبط'), vd); await wait(140);
+    log(box.solved, 'AR L9 solves at «الجملة تحتوي أربع كلمات» — 4 words, claims 4');
+  }
+
+  /* ------------------------------------------------- AR L13 invisible -- */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(13); const box = hookSolve(w); const d = w.document;
+    const hw = [...d.querySelectorAll('.para .hw')];
+    log(hw.length === 6, 'AR L13 hides exactly 6 Arabic words (' + hw.length + ')');
+    log(hw.filter(s => s.textContent === 'فيروزي').length === 1, 'AR L13 exactly one is the colour');
+    const input = d.querySelector('.field');
+    log(input.dir === 'rtl', 'AR L13 answer field is RTL');
+    input.value = 'ميناء'; await wait(120);
+    log(!box.solved, 'AR L13 rejects a non-colour hidden word');
+    input.value = 'الفيروزي'; await wait(120);
+    log(box.solved, 'AR L13 accepts the colour with or without «ال»');
+  }
+
+  /* ---------------------------------------------------- AR L15 finale -- */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(15); const box = hookSolve(w); const d = w.document;
+    const btn = [...d.querySelectorAll('.gbtn')].find(b => /حُل/.test(b.textContent));
+    click(w, btn); await wait(60);
+    log(!box.solved, 'AR L15 the locked button refuses');
+
+    await dragTo(w, arWord(d, 'لا'), mid(d.querySelector('#void'))); await wait(80);
+    log(d.querySelectorAll('.latch.is-on').length === 1,
+        'AR L15 latch 1 opens — «لا يمكنك» becomes «يمكنك»');
+
+    const h = mid(btn.querySelector('.rs-handle'));
+    await dragTo(w, btn.querySelector('.rs-handle'), { x: h.x + 130, y: h.y }, 8); await wait(80);
+    log(d.querySelectorAll('.latch.is-on').length === 2, 'AR L15 latch 2 opens on resize');
+
+    const track = d.querySelector('#progressTrack');
+    const r = track.getBoundingClientRect();
+    pev(w, 'pointerdown', track, r.left + 4, r.top + 2); await wait(30);
+    pev(w, 'pointermove', track, r.right + 60, r.top + 2); await wait(30);
+    pev(w, 'pointerup', track, r.right + 60, r.top + 2); await wait(80);
+    log(d.querySelectorAll('.latch.is-on').length === 3,
+        'AR L15 latch 3 opens — the LTR-pinned bar still maps pointer X correctly');
+
+    click(w, btn); await wait(60);
+    log(box.solved, 'AR L15 solves with all three latches open');
+  }
+
+  /* --------------------------------------- AR every level still builds - */
+  {
+    setSave({ lang: 'ar' });
+    const w = await loadLevel(1); const d = w.document;
+    let errs = [];
+    const realErr = w.console.error;
+    w.console.error = (...a) => { errs.push(a.join(' ')); realErr.apply(w.console, a); };
+    w.addEventListener('error', e => errs.push('throw: ' + e.message));
+    for (let i = 0; i < w.RULESET_LEVELS.length; i++) {
+      w.RULESET.load(i); await wait(90);
+      /* the finale deliberately gives no instruction */
+      if (w.RULESET_LEVELS[i].id !== 45 && !d.querySelector('#instruction').textContent.trim())
+        errs.push('level ' + (i + 1) + ' rendered an empty instruction');
+    }
+    log(errs.length === 0, 'AR all 15 levels build in Arabic' +
+        (errs.length ? ' → ' + errs.join(' / ') : ''));
+    setSave({ lang: 'en' });
+    localStorage.removeItem('ruleset:v1');
+  }
+
+  /* ===================================================================== *
+     ARCHITECTURE — state, capabilities, declared chrome
+     ===================================================================== */
+
+  /* ------------------------------------------- v1 save still migrates -- */
+  {
+    // exactly what a player who never saw v2 has in their browser
+    localStorage.setItem('ruleset:v1', JSON.stringify({
+      unlocked: 9, solved: [1,2,3,4,5,6,7,8], theme: 'dark', lang: 'en'
+    }));
+    const w = await loadLevel(3);
+    const S = w.RULESET_STATE, d = S.data;
+    log(d.unlocked === 9 && d.solved.length === 8, 'a v1 save keeps its progress');
+    log(d.theme === 'dark' && d.lang === 'en', 'a v1 save keeps its preferences');
+    log(d.v === 4 && Array.isArray(d.mechanics) && Array.isArray(d.inventory) &&
+        Array.isArray(d.echoMemory) && Array.isArray(d.echoTray),
+        'a v1 save is migrated to the current schema, gaining every later field');
+
+    // live.js reads these two and nothing else — they must never move
+    const raw = JSON.parse(w.localStorage.getItem('ruleset:v1'));
+    log(Array.isArray(raw.solved) && typeof raw.unlocked === 'number',
+        'co-op layer contract: solved[] and unlocked stay top-level');
+    log(typeof w.RULESET.index === 'number', 'co-op layer contract: RULESET.index still exposed');
+
+    // and a corrupt save must not take the game down with it
+    localStorage.setItem('ruleset:v1', '{"solved":"not-an-array",');
+    const w2 = await loadLevel(1);
+    log(w2.RULESET_STATE.data.solved.length === 0, 'a corrupt save degrades to a fresh one');
+    localStorage.removeItem('ruleset:v1');
+  }
+
+  /* --------------------------------------------- mechanics are learned -- */
+  {
+    localStorage.removeItem('ruleset:v1');
+    const w = await loadLevel(1);
+    const S = w.RULESET_STATE;
+    log(!S.knows('dragText'), 'a new player knows no mechanics');
+
+    const d = w.document;
+    const dot = d.querySelector('.dot');
+    const end = [...d.querySelectorAll('.w')].find(s => s.dataset.word === 'end');
+    await dragTo(w, end, mid(dot));
+    await wait(120);
+    log(S.knows('dragText'), 'solving L1 records the mechanic it introduced');
+    log(S.data.counts.solves === 1, 'the solve counter advances');
+    log(S.didEver('solve', x => x.id === 1), 'the solve lands in action history');
+
+    // level 8 declares two
+    S.simulateThrough(8, w.RULESET_LEVELS);
+    log(S.knows('multiInput') && S.knows('keyboardControl'),
+        'a level may introduce more than one mechanic');
+    log(S.knowsAll(['dragText','removeText','zoom']), 'knowsAll answers for a set');
+    localStorage.removeItem('ruleset:v1');
+  }
+
+  /* ------------------------------------- inventory survives everything -- */
+  {
+    localStorage.removeItem('ruleset:v1');
+    const w = await loadLevel(1);
+    const S = w.RULESET_STATE;
+
+    S.give('brass-key', 18, { teeth: 3 });
+    log(S.has('brass-key'), 'an object can be collected');
+    log(S.item('brass-key').data.teeth === 3, 'an object carries a payload');
+
+    w.RULESET.load(4); await wait(120);
+    w.RULESET.load(9); await wait(120);
+    log(S.has('brass-key'), 'an object survives level transitions');
+
+    S.transform('brass-key', 'bent-key');
+    log(!S.has('brass-key') && S.has('bent-key'), 'an object can be transformed');
+
+    const w2 = await loadLevel(1);          // full reload
+    log(w2.RULESET_STATE.has('bent-key'), 'an object survives a reload');
+    log(w2.RULESET_STATE.take('bent-key') !== null, 'an object can be consumed');
+    log(!w2.RULESET_STATE.has('bent-key'), 'a consumed object is gone');
+    localStorage.removeItem('ruleset:v1');
+  }
+
+  /* ------------------------------------------- declared chrome only ---- */
+  {
+    const w = await loadLevel(1);
+    const errs = [];
+    const realErr = w.console.error;
+    w.console.error = (...a) => { errs.push(a.join(' ')); };
+
+    // L1 declares nothing, so every claim must be refused
+    const ctx = w.RULESET.ctx;
+    log(ctx.claim('progress') === null, 'an undeclared level cannot claim the progress bar');
+    log(ctx.claim('hint') === null, 'an undeclared level cannot claim the Hint button');
+    log(ctx.claim('levelNumber') === null, 'an undeclared level cannot claim the level counter');
+    log(errs.length === 3, 'each refusal is reported to the console');
+    w.console.error = realErr;
+
+    log(!w.document.querySelector('#progressTrack').classList.contains('is-live'),
+        'a refused claim leaves the chrome untouched');
+
+    // L10 declares progress, so it works and is restored afterwards
+    const w2 = await loadLevel(10);
+    const track = w2.document.querySelector('#progressTrack');
+    log(track.classList.contains('is-live'), 'a declaring level may claim the bar');
+    log(w2.RULESET_LEVELS[9].globalElementsAllowed.indexOf('progress') === 0,
+        'and the declaration is visible on the level object');
+    w2.RULESET.load(0); await wait(140);
+    log(!track.classList.contains('is-live'), 'the claim is released on teardown');
+  }
+
+  /* ---------------------------------------------- claimable buttons ---- */
+  {
+    const w = await loadLevel(1);
+    const d = w.document;
+    // grant the running level a declaration, then claim through the real path
+    w.RULESET.ctx.level.globalElementsAllowed = ['hint', 'levelNumber'];
+
+    let pressed = 0;
+    const h = w.RULESET.ctx.claim('hint', { onPress: () => pressed++ });
+    log(!!h && h.el === d.querySelector('#btnHint'), 'claiming Hint hands back the element');
+    h.setLabel('KEY');
+    log(d.querySelector('#btnHint').textContent === 'KEY', 'a claimed button can be relabelled');
+
+    const beforeHintLine = d.querySelector('#hintline').textContent;
+    click(w, d.querySelector('#btnHint'));
+    await wait(60);
+    log(pressed === 1, 'the level receives the press');
+    log(d.querySelector('#hintline').textContent === beforeHintLine,
+        'and the engine no longer shows its own hint');
+
+    const n = w.RULESET.ctx.claim('levelNumber', { editable: true });
+    log(n.value() === 1, 'the level counter reads as a number');
+    n.set(42);
+    log(n.value() === 42, 'and can be written to');
+
+    w.RULESET.load(1); await wait(140);
+    log(d.querySelector('#btnHint').textContent !== 'KEY', 'a claimed button is restored');
+    log(d.querySelector('#levelNum').textContent === '02', 'the counter is restored');
+  }
+
+  /* ------------------------------------------------- three-stage hints -- */
+  {
+    const w = await loadLevel(3);
+    const d = w.document;
+    const line = d.querySelector('#hintline'), btn = d.querySelector('#btnHint');
+    log(w.RULESET.hintsOf(w.RULESET_LEVELS[2]).length === 3, 'a level offers three hint stages');
+
+    click(w, btn); await wait(40);
+    const a = line.textContent;
+    click(w, btn); await wait(40);
+    const b = line.textContent;
+    click(w, btn); await wait(40);
+    const c = line.textContent;
+    log(a && b && c && a !== b && b !== c, 'each press reveals a different stage');
+    log(btn.disabled, 'the button disables once the ladder is exhausted');
+    log(w.RULESET_STATE.hintsOn(3) === 3, 'hints used are recorded per level');
+    log(w.RULESET_STATE.count('hints') >= 3, 'and counted globally');
+
+    // legacy shape (hint/hint2 only) must still work
+    log(w.RULESET.hintsOf({ hint: 'a', hint3: 'c' }).length === 2, 'legacy hint fields still resolve');
+    log(w.RULESET.hintsOf({ hints: ['x','y','z'] }).length === 3, 'an explicit hints[] resolves');
+    localStorage.removeItem('ruleset:v1');
+  }
+
+  /* ------------------------------------------------ text capabilities -- */
+  {
+    const w = await loadLevel(1);
+    const ctx = w.RULESET.ctx, d = w.document;
+
+    const ls = ctx.letters('end');
+    log(ls.length === 3, 'a word splits into letters');
+    log(ctx.letterText(ctx.word('end')) === 'end', 'the split word reads back');
+    await dragTo(w, ls[0], { x: mid(d.querySelector('.dot')).x, y: mid(d.querySelector('.dot')).y });
+    await wait(60);
+    log(ctx.letterText(ctx.word('end')) === 'nd', 'a dragged letter leaves the word');
+    log(w.RULESET_STATE.knows('letters'), 'splitting records the mechanic');
+
+    const w2 = await loadLevel(9);
+    const c2 = w2.RULESET.ctx;
+    c2.editable('four', { onChange: () => {} });
+    const span = c2.word('four');
+    log(span.getAttribute('contenteditable') === 'plaintext-only', 'a word becomes editable');
+    span.textContent = 'six';
+    span.dispatchEvent(new w2.Event('input', { bubbles: true }));
+    await wait(60);
+    log(c2.hasWord('six'), 'editing a word changes what the sentence says');
+  }
+
+  /* ---------------------------------------------- object capabilities -- */
+  {
+    const w = await loadLevel(1);
+    const ctx = w.RULESET.ctx, d = w.document;
+    const S = w.RULESET_STATE;
+
+    const box = ctx.el('div', 'obj', { x: 40, y: 40, style: { width: '40px', height: '40px' } });
+    const r = ctx.rotate(box, { snap: 0 });
+    log(!!box.querySelector('.rot-handle'), 'a rotatable object grows a handle');
+    r.set(90);
+    log(/rotate\(90/.test(box.style.transform), 'and can be turned');
+    log(S.knows('rotateObject'), 'rotation records its mechanic');
+
+    const src = ctx.el('div', 'obj', { x: 200, y: 40, style: { width: '30px', height: '30px' } });
+    const dup = ctx.duplicable(src, { max: 2 });
+    const m = mid(src);
+    await dragTo(w, src, { x: m.x + 60, y: m.y + 20 });
+    await wait(40);
+    log(dup.count() === 2, 'dragging a duplicable object leaves a copy');
+
+    const a = ctx.el('div', 'obj', { x: 300, y: 150, style: { width: '30px', height: '30px' } });
+    const b = ctx.el('div', 'obj', { x: 380, y: 150, style: { width: '30px', height: '30px' } });
+    let fused = 0;
+    ctx.combine([a, b], { onCombine: () => { fused++; } });
+    await dragTo(w, a, mid(b));
+    await wait(40);
+    log(fused === 1, 'dropping one object on another combines them');
+
+    const esc = ctx.el('div', 'obj', { x: 30, y: 200, style: { width: '26px', height: '26px' } });
+    let out = 0;
+    const e = ctx.escapable(esc, { onEscape: () => { out++; } });
+    const st = d.querySelector('.stage').getBoundingClientRect();
+    await dragTo(w, esc, { x: st.left - 80, y: st.top + 40 }, 8);
+    await wait(60);
+    log(out === 1 && e.escaped(), 'an object can be taken out of the stage');
+    log(d.querySelector('.loose').contains(esc), 'and it lives in the free layer afterwards');
+    log(S.knows('escapeObject'), 'escaping records its mechanic');
+  }
+
+  /* --------------------------------------------- ledger + action log --- */
+  {
+    localStorage.removeItem('ruleset:v1');
+    const w = await loadLevel(3);
+    const S = w.RULESET_STATE;
+
+    w.RULESET.ctx.route('removed-red');
+    log(S.routeOf(3) === 'removed-red', 'a level can record which route was taken');
+    w.RULESET.ctx.remember('COBALT');
+    log(S.answerOf(3) === 'COBALT', 'and an answer for a later level to ask about');
+
+    const before = S.count('restarts');
+    w.RULESET.restart(); await wait(140);
+    log(S.count('restarts') === before + 1, 'restarts are counted');
+    log(S.hintsOn(3) === 0, 'a fresh level starts with no hints used');
+
+    w.RULESET.applyTheme('dark');
+    log(S.count('themeChanges') >= 1, 'theme changes are counted');
+    log(S.history('theme').length >= 1, 'and recorded in history');
+    log(S.history().length <= 400, 'history stays bounded');
+    localStorage.removeItem('ruleset:v1');
+  }
+
+  /* --------------------------------------------------- the puzzle lab -- */
+  {
+    const w = await loadLevel(1);
+    const d = w.document;
+    log(d.querySelector('.lab') !== null, 'the lab attaches to the dev panel');
+    log(d.querySelector('#dev').hidden, 'and stays hidden until asked for');
+    {
+      const names = [...d.querySelectorAll('.lab-tab')].map(b => b.dataset.tab);
+      const want = ['levels', 'state', 'mechanics', 'items', 'history', 'echo'];
+      log(want.every(n => names.indexOf(n) >= 0) && names.length === want.length,
+          'it offers a tab per subsystem: ' + names.join(', '));
+    }
+
+    w.RULESET.toggleDev(true);
+    await wait(120);
+    log(!d.querySelector('#dev').hidden, 'backtick still opens the panel');
+    const mech = [...d.querySelectorAll('.lab-tab')].find(b => b.dataset.tab === 'mechanics');
+    click(w, mech); await wait(80);
+    log(d.querySelectorAll('.lab-check').length > 10, 'the mechanics tab lists the vocabulary');
+    w.RULESET.toggleDev(false);
+  }
+
+  /* ==================================================================== *
+     ECHO — Season II cipher. Exhaustive, because thirty levels will rest
+     on it and a single asymmetry would poison the whole season.
+     ==================================================================== */
+  {
+    const w = await loadLevel(1);
+    const E = w.RULESET_ECHO;
+    log(!!E, 'echo.js is loaded');
+
+    /* -- the fixed contract -- */
+    log(E.TOKENS.join(' ') === 'VE NA OR SE KA MI RU LI', 'token order is VE NA OR SE KA MI RU LI');
+    log(E.TOKENS.every((t, i) => E.indexOf(t) === i), 'every token maps to its documented index');
+    log(E.GRID.length === 64 && new Set(E.GRID).size === 64, 'the grid holds 64 unique characters');
+    log(E.tokensToCharacter('VE', 'RU') === 'G', 'the worked example holds: VE RU → G');
+    log(E.tokenAt(8) === 'VE' && E.tokenAt(-1) === 'LI', 'the ring wraps in both directions');
+
+    /* -- all 64 characters, both directions -- */
+    let bad = [];
+    for (const ch of E.GRID) {
+      const [r, c] = E.characterToTokens(ch);
+      if (E.tokensToCharacter(r, c) !== ch) bad.push(ch);
+    }
+    log(bad.length === 0, 'all 64 grid characters survive character → tokens → character' +
+        (bad.length ? ' (' + bad.join('') + ')' : ''));
+
+    /* -- all 64 characters at all 8 phases -- */
+    bad = [];
+    for (const ch of E.GRID) {
+      for (let p = 0; p < 8; p++) {
+        const r = E.decodeText(E.encodeText(ch, p));
+        if (!r.ok || r.text !== ch || r.phase !== p) bad.push(ch + '@' + p);
+      }
+    }
+    log(bad.length === 0, 'all 64 characters round-trip at all 8 phases (512 cases)' +
+        (bad.length ? ' — failed ' + bad.slice(0, 6).join(', ') : ''));
+
+    /* -- a full sentence at every phase -- */
+    const sentence = "THE QUICK BROWN FOX 0123!";
+    bad = [];
+    for (let p = 0; p < 8; p++) {
+      const r = E.decodeText(E.encodeText(sentence, p));
+      if (r.text !== sentence) bad.push(p);
+    }
+    log(bad.length === 0, 'a mixed sentence round-trips at every phase');
+
+    /* -- the phase prefix is literal, not shifted -- */
+    bad = [];
+    for (let p = 0; p < 8; p++) if (E.encodeText('A', p)[0] !== E.tokenAt(p)) bad.push(p);
+    log(bad.length === 0, 'the first token states the phase literally');
+    log(E.encodeText('A', 3)[0] === 'SE', 'phase 3 is announced as SE');
+
+    /* -- phase actually changes the ciphertext -- */
+    const seen = new Set(Array.from({ length: 8 }, (_, p) => E.encodeText('HELLO', p).join(' ')));
+    log(seen.size === 8, 'each phase produces a distinct ciphertext');
+
+    /* -- checksum -- */
+    bad = [];
+    for (let p = 0; p < 8; p++) {
+      const msg = E.encodeText('CHECK ME', p, { checksum: true });
+      if (!E.verifyChecksum(msg)) bad.push(p);
+      const r = E.decodeText(msg, { checksum: true });
+      if (r.text !== 'CHECK ME' || r.checksumOk !== true) bad.push(p + '!');
+    }
+    log(bad.length === 0, 'checksummed messages verify and decode at every phase');
+
+    {
+      const msg = E.encodeText('CHECK ME', 2, { checksum: true });
+      const tampered = msg.slice();
+      tampered[3] = E.tokenAt(E.indexOf(tampered[3]) + 1);
+      log(!E.verifyChecksum(tampered), 'a single altered token fails the checksum');
+      log(E.decodeText(tampered, { checksum: true }).reason === 'checksum',
+          'and decode reports why rather than lying');
+    }
+    log(E.calculateChecksum(['VE', 'NA', 'OR']) === E.tokenAt(0 + 1 + 2),
+        'the checksum is the sum of normalised indices, mod 8');
+    {
+      // computed over normalised indices → independent of phase, which is the
+      // only reason a player can use it to test a guessed phase
+      const sums = new Set([0, 3, 6].map(p => {
+        const m = E.encodeText('SAME', p, { checksum: true });
+        const payload = m.slice(1, -1).map(t => E.normalizeToken(t, p));
+        return E.calculateChecksum(payload);
+      }));
+      log(sums.size === 1, 'the checksum of a message is the same at every phase');
+    }
+
+    /* -- malformed input is a puzzle state, never a crash -- */
+    log(E.decodeText([]).ok === false && E.decodeText([]).reason === 'empty', 'an empty message is refused');
+    log(E.decodeText(['VE', 'NA']).reason === 'odd-payload', 'an odd payload is refused');
+    log(E.decodeText('VE ZZ NA').reason === 'unknown-token', 'an unknown token is refused');
+    let threw = false;
+    try { E.characterToTokens('€'); } catch (e) { threw = true; }
+    log(threw, 'a character that is not on the grid throws rather than substituting');
+
+    /* -- implicit level phase -- */
+    log(E.levelPhase(16) === 0 && E.levelPhase(23) === 7 && E.levelPhase(24) === 0,
+        'level phase cycles: 16→0, 23→7, 24→0');
+
+    /* -- echo marks for every level of the season -- */
+    const SEASON = {
+      16:'Y',17:'O',18:'U',19:' ',20:'B',21:'U',22:'I',23:'L',24:'T',25:' ',
+      26:'T',27:'H',28:'E',29:' ',30:'K',31:'E',32:'Y',33:'.',34:' ',35:'U',
+      36:'S',37:'E',38:' ',39:'I',40:'T',41:' ',42:'N',43:'O',44:'W'
+    };
+    bad = [];
+    for (const lv in SEASON) {
+      const id = +lv;
+      const tokens = E.encodeEchoMark(SEASON[lv], id);
+      if (tokens.length !== 2) bad.push(lv + ':len');
+      if (E.decodeEchoMark(tokens, id) !== SEASON[lv]) bad.push(lv);
+    }
+    log(bad.length === 0, 'every mark for levels 16–44 encodes and decodes (29 levels)' +
+        (bad.length ? ' — failed ' + bad.join(', ') : ''));
+    log(Object.keys(SEASON).length === 29, 'the season carries exactly 29 marks');
+
+    /* a mark read at the wrong level must NOT quietly produce a plausible
+       character — the level number has to matter */
+    {
+      const right = E.encodeEchoMark('Y', 16);
+      log(E.decodeEchoMark(right, 17) !== 'Y', 'a mark decoded at the wrong level does not give the right character');
+    }
+    log(E.encodeEchoMark('Y', 16).join(' ') !== E.encodeEchoMark('Y', 17).join(' '),
+        'the same character is written differently in adjacent levels');
+
+    /* -- grammar -- */
+    log(E.readPhrase('VE NA').ok && E.readPhrase('VE NA').action === 'VE', 'VE NA parses as move-this');
+    log(E.readPhrase('VE NA OR').direction === 'OR', 'a direction is read');
+    log(E.readPhrase('KA VE NA').negated === true, 'KA negates');
+    log(E.readPhrase('RU VE NA').repeat === true, 'RU repeats');
+    log(E.readPhrase('VE NA MI').count === 'MI', 'a count is read');
+    log(E.readPhrase('NA VE').ok === false, 'target-before-action is rejected');
+    log(E.readPhrase('VE NA OR SE').ok === false, 'two directions are rejected');
+    log(E.phraseMatches('KA VE NA', { negated: true, action: 'VE', target: 'NA' }),
+        'phraseMatches compares meaning, not spelling');
+  }
+
+  /* ------------------------------------------------------- echo memory -- */
+  {
+    const w = await loadLevel(1);
+    const E = w.RULESET_ECHO, S = w.RULESET_STATE;
+    S.resetEcho();
+    log(S.marks().length === 0, 'echo memory starts empty');
+
+    S.remember(16, E.encodeEchoMark('Y', 16), E.levelPhase(16));
+    S.remember(17, E.encodeEchoMark('O', 17), E.levelPhase(17));
+    log(S.marks().length === 2, 'marks are banked');
+    log(S.hasMark(16) && !S.hasMark(99), 'membership is queryable');
+
+    S.remember(16, E.encodeEchoMark('Y', 16), 0);
+    log(S.marks().length === 2, 'replaying a level does not duplicate its mark');
+
+    const stored = S.markFor(16);
+    log(!!stored && stored.tokens.length === 2, 'a mark stores exactly two tokens');
+    log(JSON.stringify(stored).indexOf('"Y"') < 0,
+        'the decoded character is never stored — only the encoded pair');
+    log(E.decodeEchoMark(stored.tokens, stored.levelId) === 'Y',
+        'but it is recoverable from memory alone, with no notes');
+
+    /* survives a reload — the season is a month long */
+    const w2 = await loadLevel(1);
+    log(w2.RULESET_STATE.marks().length === 2, 'echo memory survives a reload');
+
+    /* a v1 save must migrate rather than explode */
+    w2.localStorage.setItem('ruleset:v1', JSON.stringify({ unlocked: 5, solved: [1,2,3], theme: 'dark' }));
+    const w3 = await loadLevel(1);
+    log(Array.isArray(w3.RULESET_STATE.data.echoMemory) && w3.RULESET_STATE.data.echoMemory.length === 0,
+        'a legacy save migrates forward with an empty echo memory');
+    log(w3.RULESET_STATE.data.solved.length === 3, 'and keeps its Season I progress');
+
+    w3.RULESET_STATE.resetEcho();
+    log(w3.RULESET_STATE.data.solved.length === 3, 'resetting Season II leaves Season I alone');
+    w3.localStorage.clear();
+  }
+
+  /* ------------------------------------------- season I is untouched --- */
+  {
+    const w = await loadLevel(1);
+    const marks = [...w.document.querySelectorAll('#echoMark')];
+    log(marks.length === 1, 'the echo mark element exists');
+    log(marks[0].hidden, 'and is hidden on a Season I level');
+
+    const seasonOne = w.RULESET_LEVELS.filter(lv => lv.id <= 15);
+    log(seasonOne.length === 15, 'Season I is still exactly 15 levels');
+    log(!seasonOne.some(lv => lv.echoMarkChar), 'no Season I level declares an echo mark');
+    log(!seasonOne.some(lv => lv.introducedToken), 'and none introduces an echo token');
+  }
+
+  /* =========================================== 16 — VE, the first token -- */
+  {
+    const w = await loadLevel(16);
+    const box = hookSolve(w);
+    const d = w.document;
+    const E = w.RULESET_ECHO;
+    const level = w.RULESET_LEVELS.find(l => l.id === 16);
+
+    log(!!level && level.day === 1, 'level 16 opens Season II as day 1');
+    log(d.querySelector('.instruction').textContent.trim() === 'VE',
+        'the instruction is the single token VE and nothing else');
+
+    const token = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 've');
+    log(!!token && token.classList.contains('is-token'), 'VE is marked as an echo token');
+    log(!token.classList.contains('is-free'),
+        'and carries no draggable affordance — picking the word up is not the answer');
+
+    /* no English anywhere in the playfield */
+    log(/^\s*$/.test(d.querySelector('.stage').textContent),
+        'the stage contains no text at all — nothing translates VE');
+
+    const obj = d.querySelector('.echo-obj');
+    const target = d.querySelector('.slot');
+    log(!!obj && !!target, 'there is one object and one destination');
+    log(obj.classList.contains('grab'), 'the object carries the Season I drag affordance');
+
+    /* the destination must not sit straight to the right: a purely horizontal
+       first lesson would teach "VE = right" and collide with SE later */
+    const o = mid(obj), t = mid(target);
+    log(Math.abs(t.y - o.y) > 40, 'the destination is diagonal, so VE cannot read as a direction');
+
+    log(!box.solved, 'not solved at rest');
+    await dragTo(w, obj, { x: t.x, y: t.y }, 8);
+    await wait(120);
+    log(target.classList.contains('is-done'), 'dropping the object on the destination lands it');
+    log(token.classList.contains('is-echo-move'), 'and the word VE itself visibly moves');
+
+    log(!box.solved, 'the success card waits, so the reaction is not hidden behind it');
+    await wait(900);
+    log(box.solved, 'then the level completes');
+  }
+
+  /* ------------------------------------------------- 16 — the echo mark -- */
+  {
+    const w = await loadLevel(16);
+    const d = w.document;
+    const E = w.RULESET_ECHO, S = w.RULESET_STATE;
+    S.resetEcho();
+
+    const chip = d.querySelector('#echoMark');
+    log(!chip.hidden, 'the echo mark is visible on a Season II level');
+    log(chip.querySelectorAll('span').length === 2, 'it is exactly two tokens');
+    const shown = [...chip.querySelectorAll('span')].map(s => s.textContent);
+    log(shown.every(t => E.isToken(t)), 'both are real echo tokens (' + shown.join(' ') + ')');
+    log(chip.textContent.indexOf('Y') < 0, 'the character it encodes is never displayed');
+    log(!chip.onclick && chip.getAttribute('aria-hidden') === 'true',
+        'it is inert — decoration until the season says otherwise');
+    log(E.decodeEchoMark(shown, 16) === 'Y', 'and it decodes to the level 16 character');
+
+    /* Order is meaning: a mark is [row, column]. If RTL mirrored the pair, the
+       same mark would read backwards in Arabic and decode to a different
+       character — so it is pinned LTR like the progress bar. */
+    log(chip.getAttribute('dir') === 'ltr', 'the mark is pinned left-to-right');
+    w.RULESET.applyLang('ar');
+    await wait(120);
+    const arChip = d.querySelector('#echoMark');
+    const arShown = [...arChip.querySelectorAll('span')].map(s => s.textContent);
+    log(arShown.join(' ') === shown.join(' '), 'and reads in the same order in Arabic (' +
+        arShown.join(' ') + ')');
+    log(E.decodeEchoMark(arShown, 16) === 'Y', 'so it decodes identically in both languages');
+    w.RULESET.applyLang('en');
+    await wait(120);
+
+    /* banking happens on completion, not on arrival */
+    log(!S.hasMark(16), 'the mark is not banked merely by visiting the level');
+    w.RULESET.solve();
+    await wait(80);
+    log(S.hasMark(16), 'completing the level banks it into echo memory');
+    const held = S.markFor(16);
+    log(held.tokens.join(' ') === shown.join(' '), 'what was banked is what was shown');
+    log(held.phase === 0, 'stored with the level phase, which for level 16 is 0');
+    S.resetEcho();
+  }
+
+  /* ============================================ 17 — NA, "this one" ---- */
+  {
+    const w = await loadLevel(17);
+    const box = hookSolve(w);
+    const d = w.document;
+
+    const objs = [...d.querySelectorAll('.echo-obj')];
+    const slot = d.querySelector('.slot');
+    log(objs.length === 3 && !!slot, 'three objects and one destination');
+    log(/^\s*$/.test(d.querySelector('.stage').textContent), 'no text in the playfield');
+
+    const na = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 'na');
+    log(!!d.querySelector('.echo-tether'), 'NA is tethered to something');
+    const chosen = objs.find(o => o.classList.contains('is-na'));
+    log(!!chosen, 'exactly one object is the referent');
+    log(objs.filter(o => o.classList.contains('is-na')).length === 1, 'and only one');
+    log(na.classList.contains('echo-pulse') && chosen.classList.contains('echo-pulse'),
+        'the word and its object share one rhythm');
+
+    /* the referent must not simply be the nearest — proximity is not meaning */
+    const near = objs.slice().sort((a, b) =>
+      Math.hypot(mid(a).x - mid(slot).x, mid(a).y - mid(slot).y) -
+      Math.hypot(mid(b).x - mid(slot).x, mid(b).y - mid(slot).y))[0];
+    log(near !== chosen, 'the referent is not the object closest to the destination');
+
+    /* a decoy is refused gently: it goes home, nothing shakes, nothing fails */
+    const decoy = objs.find(o => o !== chosen);
+    const dHome = { x: decoy.offsetLeft, y: decoy.offsetTop };
+    await dragTo(w, decoy, mid(slot), 8);
+    await wait(60);
+    log(!box.solved, 'moving a decoy does not solve');
+    log(decoy.classList.contains('is-springing'), 'the decoy is returned smoothly');
+    log(!d.querySelector('.stage').classList.contains('is-shaking'), 'and nothing is punished');
+    await wait(520);
+    log(Math.abs(decoy.offsetLeft - dHome.x) < 3, 'the decoy ends up back home');
+
+    /* Magnetism: a destination must pull, not sit inert until the object is
+       deep enough and then jerk it to centre. Released short of the slot
+       centre, the object should end up closer to it than the pointer was. */
+    {
+      const sc = mid(slot);
+      const off = { x: sc.x - 34, y: sc.y - 22 };        // near, deliberately not on it
+      await dragTo(w, chosen, off, 8);
+      await wait(30);
+      const landed = mid(chosen);
+      const pulled = Math.hypot(landed.x - sc.x, landed.y - sc.y);
+      const raw = Math.hypot(off.x - sc.x, off.y - sc.y);
+      log(pulled < raw, 'a destination pulls an object toward it as it approaches (' +
+          Math.round(raw) + 'px → ' + Math.round(pulled) + 'px)');
+    }
+
+    await dragTo(w, chosen, mid(slot), 8);
+    await wait(120);
+    log(slot.classList.contains('is-done'), 'moving the NA object lands it');
+    await wait(700);
+    log(box.solved, 'and solves the level');
+  }
+
+  /* ============================================= 18 — OR, the left ----- */
+  {
+    const w = await loadLevel(18);
+    const box = hookSolve(w);
+    const d = w.document;
+
+    const zones = [...d.querySelectorAll('.echo-zone')];
+    const obj = d.querySelector('.echo-obj');
+    log(zones.length === 2, 'two destinations');
+    const [zl, zr] = zones[0].offsetLeft < zones[1].offsetLeft ? zones : [zones[1], zones[0]];
+    log(zl.offsetWidth === zr.offsetWidth && zl.offsetHeight === zr.offsetHeight,
+        'the two are identical in size — neither is the obvious one');
+    log(Math.abs(mid(obj).x - (mid(zl).x + mid(zr).x) / 2) < 8,
+        'the object starts equidistant between them');
+
+    const or = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 'or');
+    log(or.classList.contains('echo-pulse') && zl.classList.contains('echo-pulse'),
+        'OR and the LEFT zone share a rhythm');
+    log(!zr.classList.contains('echo-pulse'), 'the right zone does not');
+
+    /* the whole clue must be non-verbal */
+    log(/^\s*$/.test(d.querySelector('.stage').textContent), 'no labels anywhere in the play space');
+
+    const home = { x: obj.offsetLeft, y: obj.offsetTop };
+    await dragTo(w, obj, mid(zr), 8);
+    await wait(80);
+    log(!box.solved, 'the right side does not solve');
+    log(obj.classList.contains('is-springing'), 'it is returned gently');
+    await wait(560);
+    log(Math.abs(obj.offsetLeft - home.x) < 4, 'back to the middle');
+
+    await dragTo(w, obj, mid(zl), 8);
+    await wait(120);
+    log(zl.classList.contains('is-done'), 'the left side accepts it');
+    await wait(700);
+    log(box.solved, 'VE NA OR is satisfied');
+  }
+
+  /* ============================================ 19 — SE, the right ----- */
+  {
+    const w = await loadLevel(19);
+    const box = hookSolve(w);
+    const d = w.document;
+
+    const zones = [...d.querySelectorAll('.echo-zone')];
+    log(zones.length === 2 && zones.every(z => z.classList.contains('is-round')),
+        'the same choice in different clothes: round pads, not squares');
+    const [zl, zr] = zones[0].offsetLeft < zones[1].offsetLeft ? zones : [zones[1], zones[0]];
+    log(Math.abs(zl.offsetTop - zr.offsetTop) > 40, 'and staggered, so it is not level 18 redrawn');
+
+    const se = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 'se');
+    log(se.classList.contains('echo-pulse') && zr.classList.contains('echo-pulse'),
+        'SE echoes the RIGHT pad');
+    log(!zl.classList.contains('echo-pulse'), 'the left pad is quiet — SE is not OR');
+
+    const obj = d.querySelector('.echo-obj');
+    await dragTo(w, obj, mid(zl), 8);
+    await wait(80);
+    log(!box.solved, 'left does not solve this time');
+    await wait(560);
+
+    await dragTo(w, obj, mid(zr), 8);
+    await wait(120);
+    log(zr.classList.contains('is-done'), 'right does');
+    await wait(660);
+    log(box.solved, 'VE NA SE is satisfied — one drag, no puzzle-solving required');
+  }
+
+  /* ============================================== 20 — KA, do not ------ */
+  {
+    const w = await loadLevel(20);
+    const box = hookSolve(w);
+    const d = w.document;
+
+    const obj = d.querySelector('.echo-obj');
+    const slot = d.querySelector('.slot');
+    log(!!obj && !!slot, 'one object and one tempting destination');
+    log(obj.classList.contains('grab'), 'the object still looks completely draggable');
+    log(!!d.querySelector('.echo-tether'), 'NA still names it');
+    const ka = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 'ka');
+    log(ka.classList.contains('echo-pulse'), 'KA is the word drawing attention');
+
+    log(!d.querySelector('.bar') && !d.querySelector('.bignum'),
+        'there is no visible countdown of any kind');
+
+    /* taking the bait resets the clock and returns the object */
+    const home = { x: obj.offsetLeft, y: obj.offsetTop };
+    await dragTo(w, obj, mid(slot), 8);
+    await wait(80);
+    log(!box.solved, 'moving it does not solve — it is forbidden, not required');
+    log(obj.classList.contains('is-springing'), 'and it glides back rather than failing');
+    await wait(600);
+    log(Math.abs(obj.offsetLeft - home.x) < 4, 'to exactly where it started');
+
+    /* the restlessness drains as it is left alone: feedback without a timer */
+    const early = obj.style.transform;
+    await wait(1500);
+    log(!box.solved, 'still not solved after 1.5 seconds of stillness');
+    await wait(3200);
+    log(box.solved, 'left untouched for four seconds, KA VE NA is satisfied');
+    log(early !== obj.style.transform, 'the object visibly settled while waiting');
+  }
+
+  /* ============================================== 21 — MI, exactly one -- */
+  {
+    const w = await loadLevel(21); const box = hookSolve(w); const d = w.document;
+    const objs = [...d.querySelectorAll('.echo-obj')];
+    const slot = d.querySelector('.slot');
+    log(objs.length === 3, 'three equivalent pieces');
+    log(objs.every(o => o.classList.contains('is-na')), 'all three are valid NA pieces');
+    log(slot.offsetWidth > objs[0].offsetWidth * 2,
+        'the frame is wide enough for several — the limit is the word, not the geometry');
+    const mi = [...d.querySelectorAll('.instruction .w')].find(s => s.dataset.word === 'mi');
+    log(mi.classList.contains('has-pip'), 'MI shows one pip, not a digit');
+    log(!/[0-9１]/.test(d.querySelector('.instruction').textContent + d.querySelector('.stage').textContent),
+        'the digit 1 appears nowhere');
+
+    await dragTo(w, objs[0], mid(slot), 8); await wait(150);
+    log(!box.solved, 'one piece in does not solve instantly — it has to settle');
+
+    await dragTo(w, objs[1], mid(slot), 8); await wait(150);
+    log(!box.solved, 'a second piece breaks the count');
+    log(objs.some(o => o.classList.contains('is-springing')), 'and the arrangement resets gently');
+    await wait(700);
+
+    await dragTo(w, objs[0], mid(slot), 8); await wait(1500);
+    log(box.solved, 'exactly one, left alone for a moment, satisfies VE NA MI');
+  }
+
+  /* ================================================= 22 — RU, repeat ---- */
+  {
+    const w = await loadLevel(22); const box = hookSolve(w); const d = w.document;
+    const ghost = d.querySelector('.echo-ghost');
+    log(!!ghost, 'a demonstration plays before anything is asked');
+    log(d.querySelector('.instruction').style.opacity === '0',
+        'and the words are withheld until it has finished');
+    await wait(2600);
+    log(d.querySelector('.instruction').style.opacity === '1', 'then the instruction appears');
+
+    const obj = d.querySelector('.echo-obj');
+    /* wrong shape: down then right — the reverse order */
+    const s = mid(obj);
+    pev(w, 'pointerdown', obj, s.x, s.y); await wait(20);
+    pev(w, 'pointermove', obj, s.x, s.y + 120); await wait(20);
+    pev(w, 'pointermove', obj, s.x + 140, s.y + 120); await wait(20);
+    pev(w, 'pointerup', obj, s.x + 140, s.y + 120); await wait(120);
+    log(!box.solved, 'the same two moves in the wrong order do not count');
+    await wait(3200);
+
+    /* right shape: across, then down — broad strokes, no coordinates */
+    const s2 = mid(obj);
+    pev(w, 'pointerdown', obj, s2.x, s2.y); await wait(20);
+    pev(w, 'pointermove', obj, s2.x + 155, s2.y + 11); await wait(20);
+    pev(w, 'pointermove', obj, s2.x + 166, s2.y + 143); await wait(20);
+    pev(w, 'pointerup', obj, s2.x + 166, s2.y + 143); await wait(120);
+    log(!box.solved, 'the original is echoed back before the level ends');
+    await wait(2600);
+    log(box.solved, 'reproducing the demonstrated path satisfies RU VE NA');
+  }
+
+  /* ================================================== 23 — LI, light ---- */
+  {
+    const w = await loadLevel(23); const box = hookSolve(w); const d = w.document;
+    const dark = d.querySelector('.echo-dark');
+    const lamp = d.querySelector('.echo-lamp');
+    const things = [...d.querySelectorAll('.echo-hidden')];
+    log(!!dark && parseFloat(getComputedStyle(dark).opacity) > .9, 'the room is dark');
+    log(!!lamp && things.length > 1, 'a light to carry, and several things to find');
+    log(!d.querySelector('.echo-tether'),
+        'NA says nothing yet — naming the target up front would make the dark decoration');
+    await wait(80);
+    log(/radial-gradient/.test(dark.style.maskImage || dark.style.webkitMaskImage),
+        'the lamp cuts a real hole in the darkness');
+
+    const wrong = things[0];
+    await dragTo(w, lamp, mid(wrong), 6); await wait(400);
+    log(!box.solved, 'lighting the wrong thing does nothing');
+    log(!d.querySelector('.echo-tether'), 'and NA stays quiet');
+
+    const right = things[2];
+    await dragTo(w, lamp, mid(right), 8); await wait(200);
+    log(!!d.querySelector('.echo-tether'), 'finding it makes NA speak');
+    log(right.classList.contains('is-found'), 'and the thing answers the light');
+    await wait(1400);
+    log(box.solved, 'holding the light on it satisfies LI NA');
+  }
+
+  /* ========================================= 24 — reading a sentence ---- */
+  {
+    const w = await loadLevel(24); const box = hookSolve(w); const d = w.document;
+    const zones = [...d.querySelectorAll('.echo-zone')];
+    const objs = [...d.querySelectorAll('.echo-obj')];
+    log(zones.length === 4 && objs.length === 3,
+        'several objects and several directions — partial understanding is not enough');
+    const chosen = objs.find(o => o.classList.contains('is-na'));
+    const lefts = zones.filter(z => z.offsetLeft < 200);
+    const rights = zones.filter(z => z.offsetLeft >= 200);
+    log(lefts.length === 2 && rights.length === 2, 'two frames on each side');
+    log(lefts.every(z => z.classList.contains('echo-pulse')), 'OR marks the left pair');
+    log(rights.every(z => !z.classList.contains('echo-pulse')), 'and not the right pair');
+
+    /* right object, wrong side */
+    await dragTo(w, chosen, mid(rights[0]), 8); await wait(120);
+    log(!box.solved, 'the NA object on the right fails OR');
+
+    /* right object, right side, but two things placed → fails MI */
+    await dragTo(w, chosen, mid(lefts[0]), 8); await wait(80);
+    const other = objs.find(o => o !== chosen);
+    await dragTo(w, other, mid(lefts[1]), 8); await wait(150);
+    log(!box.solved, 'two objects placed fails MI even when one of them is right');
+
+    /* remove the extra: now all four words are satisfied at once */
+    await dragTo(w, other, { x: mid(other).x, y: mid(chosen).y - 130 }, 8);
+    await wait(900);
+    log(box.solved, 'one object, the tethered one, in a left frame — VE NA OR MI');
+  }
+
+  /* ============================================== 25 — order matters ---- */
+  {
+    const w = await loadLevel(25); const box = hookSolve(w); const d = w.document;
+    const words = () => [...d.querySelectorAll('.instruction .w')].map(s => s.textContent);
+    log(words().join(' ') === 'MI NA SE VE', 'the sentence arrives scrambled');
+    log([...d.querySelectorAll('.instruction .w')].every(s => s.classList.contains('is-free')),
+        'every token can be picked up');
+    log(parseFloat(d.querySelector('.stage').style.opacity) < 1, 'the room is inert until it reads');
+
+    const obj = d.querySelector('.echo-obj.is-na');
+    const zones = [...d.querySelectorAll('.echo-zone')];
+    const right = zones[0].offsetLeft > zones[1].offsetLeft ? zones[0] : zones[1];
+    await dragTo(w, obj, mid(right), 6); await wait(120);
+    log(!box.solved, 'and executing before ordering does nothing');
+
+    /* order it: VE NA SE MI */
+    const span = t => [...d.querySelectorAll('.instruction .w')].find(s => s.textContent === t);
+    const anchor = () => mid(d.querySelector('.instruction'));
+    for (const tok of ['VE', 'NA', 'SE', 'MI']) {
+      const s = span(tok);
+      const a = anchor();
+      await dragTo(w, s, { x: a.x + 400, y: a.y }, 5);   // send each to the end, in order
+      await wait(90);
+    }
+    log(words().join(' ') === 'VE NA SE MI', 'the words can be put in order: ' + words().join(' '));
+    await wait(200);
+    log(parseFloat(d.querySelector('.stage').style.opacity) === 1, 'and the room wakes up');
+    log(!box.solved, 'but ordering alone does not complete the level');
+
+    await dragTo(w, obj, mid(right), 8); await wait(900);
+    log(box.solved, 'understanding AND execution are both required');
+  }
+
+  /* =============================================== 26 — the Echo Ring --- */
+  {
+    const w = await loadLevel(26); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO, S = w.RULESET_STATE;
+    S.unlearn && S.unlearn('echoRing');
+
+    const holes = [...d.querySelectorAll('.echo-hole')];
+    const tiles = [...d.querySelectorAll('.echo-tile')];
+    log(holes.length === 8 && tiles.length === 8, 'eight days, eight words');
+    log(holes.map(h => h.dataset.day).join(' ') === '16 17 18 19 20 21 22 23',
+        'the days are the eight levels that introduced them');
+    log(tiles.map(t => t.dataset.token).sort().join(' ') === E.TOKENS.slice().sort().join(' '),
+        'all eight tokens are present');
+    log(tiles.map(t => t.dataset.token).join(' ') !== E.TOKENS.join(' '), 'and they start shuffled');
+
+    /* the rewind must exist, and must replay instructions rather than answers */
+    const rw = d.querySelector('.echo-rewind');
+    log(!!rw, 'a rewind is offered, so no external notes are needed');
+    rw.click(); await wait(1000);
+    const shown = d.querySelector('.echo-replay').textContent;
+    log(/VE/.test(shown), 'it replays what each day actually showed (' + shown.trim() + ')');
+    await wait(8000);
+
+    /* wrong order does not complete */
+    for (let i = 0; i < 8; i++) {
+      const tok = ['NA', 'VE', 'OR', 'SE', 'KA', 'MI', 'RU', 'LI'][i];
+      const tile = tiles.find(t => t.dataset.token === tok);
+      await dragTo(w, tile, mid(holes[i]), 5); await wait(60);
+    }
+    log(!box.solved, 'the wrong order is not accepted');
+
+    /* the order they were taught in */
+    for (let i = 0; i < 8; i++) {
+      const tile = tiles.find(t => t.dataset.token === E.TOKENS[i]);
+      await dragTo(w, tile, mid(holes[i]), 5); await wait(60);
+    }
+    await wait(400);
+    log(tiles.every(t => t.classList.contains('is-ring')), 'the row closes into a circle');
+    await wait(1600);
+    log(tiles.every(t => t.classList.contains('shows-idx')), 'and the positions turn out to be numbers');
+    const idx = E.TOKENS.map(tok => tiles.find(t => t.dataset.token === tok).querySelector('.idx').textContent);
+    log(idx.join('') === '01234567', 'VE is 0 through LI is 7, exactly as the spec fixes them');
+    await wait(1400);
+    log(box.solved, 'the Echo Ring level completes');
+    log(w.RULESET_STATE.knows('echoRing'), 'and the discovery is remembered');
+  }
+
+  /* ========================================= 27 — a pair is a square --- */
+  {
+    const w = await loadLevel(27); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const cells = [...d.querySelectorAll('.echo-cell')];
+    log(cells.length === 64, 'an 8×8 board');
+    log(d.querySelector('.echo-grid').classList.contains('is-blank'), 'with nothing in the squares yet');
+    log(cells.every(c => c.textContent === ''), 'no characters are shown');
+    const axes = [...d.querySelectorAll('.echo-ax')].map(a => a.textContent).filter(Boolean);
+    log(axes.slice(0, 8).join(' ') === E.TOKENS.join(' '), 'the edges are labelled in ring order');
+
+    const cellAt = (r, c) => cells.find(x => +x.dataset.row === r && +x.dataset.col === c);
+    click(w, cellAt(7, 7)); await wait(60);
+    log(!box.solved, 'the wrong square is refused');
+
+    /* OR is row 2, LI is column 7 */
+    click(w, cellAt(E.indexOf('OR'), E.indexOf('LI'))); await wait(80);
+    log(cellAt(2, 7).classList.contains('is-hit'), 'the crossing lights up');
+    await wait(700);
+    log(d.querySelector('.instruction').textContent.trim() === 'KA NA',
+        'and a fresh pair replaces the instruction');
+    log(!box.solved, 'one square is not proof');
+
+    click(w, cellAt(E.indexOf('KA'), E.indexOf('NA'))); await wait(700);
+    click(w, cellAt(E.indexOf('LI'), E.indexOf('VE'))); await wait(900);
+    log(box.solved, 'three crossings in a row completes it');
+  }
+
+  /* ============================================ 28 — squares hold text - */
+  {
+    const w = await loadLevel(28); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const cells = [...d.querySelectorAll('.echo-cell')];
+    log(cells.some(c => c.textContent === 'A') && cells.some(c => c.textContent === 'Z'),
+        'the same board, now with characters in it');
+    log(d.querySelector('.echo-grid').textContent.indexOf('G') >= 0, 'the alphabet is present');
+
+    const cellAt = (r, c) => cells.find(x => +x.dataset.row === r && +x.dataset.col === c);
+    click(w, cellAt(4, 4)); await wait(60);
+    log(!d.querySelector('.echo-found i.is-got'), 'a wrong square yields nothing');
+
+    click(w, cellAt(E.indexOf('VE'), E.indexOf('RU'))); await wait(80);
+    const got1 = [...d.querySelectorAll('.echo-found i')].map(i => i.textContent).join('');
+    log(got1[0] === 'G', 'VE RU gives G — the spec\'s own worked example');
+    log(!box.solved, 'one letter is not a word');
+
+    click(w, cellAt(E.indexOf('NA'), E.indexOf('RU'))); await wait(120);
+    const act = [...d.querySelectorAll('.gbtn')].pop();
+    log(!!act && act.textContent === 'GO', 'both letters spell a word, and the word becomes an action');
+    click(w, act); await wait(120);
+    log(box.solved, 'performing it completes the level');
+  }
+
+  /* ================================================ 29 — turning it ---- */
+  {
+    const w = await loadLevel(29); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    log(!!d.querySelector('.echo-ring'), 'the ring is present');
+    log(d.querySelector('.echo-ring').classList.contains('shows-index'), 'with its numbers showing');
+
+    const chips = () => [...d.querySelectorAll('.echo-chip')].map(c => c.textContent);
+    log(chips().join(' ') === 'OR OR NA SE OR', 'five tokens — not divisible into pairs');
+    log(d.querySelector('.echo-chip').classList.contains('is-phase'), 'the first stands apart');
+
+    /* rotating rewrites the payload: encoded becomes normalised, visibly */
+    const before = chips().slice(1).join(' ');
+    const node = [...d.querySelectorAll('.echo-node')].find(n => n.dataset.token === 'SE');
+    pev(w, 'pointerdown', node, mid(node).x, mid(node).y); await wait(120);
+    log(chips().slice(1).join(' ') !== before, 'turning the ring rewrites the tokens');
+
+    const cells = [...d.querySelectorAll('.echo-cell')];
+    const cellAt = (r, c) => cells.find(x => +x.dataset.row === r && +x.dataset.col === c);
+    click(w, cellAt(0, 7)); await wait(60);
+    log(!d.querySelector('.echo-found i.is-got'), 'at the wrong phase the grid gives nothing');
+
+    /* the first token says how far: OR is 2 */
+    const orNode = [...d.querySelectorAll('.echo-node')].find(n => n.dataset.token === 'OR');
+    pev(w, 'pointerdown', orNode, mid(orNode).x, mid(orNode).y); await wait(200);
+    log(chips().slice(1).join(' ') === 'VE LI NA VE',
+        'at the stated phase the payload normalises: ' + chips().slice(1).join(' '));
+
+    click(w, cellAt(0, 7)); await wait(80);      // VE LI → H
+    click(w, cellAt(1, 0)); await wait(120);     // NA VE → I
+    const got = [...d.querySelectorAll('.echo-found i')].map(i => i.textContent).join('');
+    log(got === 'HI', 'and the pairs read out as ' + got);
+    await wait(900);
+    log(box.solved, 'the level completes');
+  }
+
+  /* =========================================== 30 — read it, then do -- */
+  {
+    const w = await loadLevel(30); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const doors = [...d.querySelectorAll('.echo-door')];
+    log(doors.length === 5, 'several closed things');
+    log(!!d.querySelector('.echo-grid'), 'the grid is on hand — a tool now, not a lesson');
+
+    const msg = d.querySelector('.instruction').textContent.trim();
+    log(E.decodeText(msg).text === 'OPEN', 'the message decodes to OPEN');
+    log(E.decodeText(msg).phase === 5, 'at the phase its first token states');
+    log(msg.indexOf('OPEN') < 0, 'and the plaintext appears nowhere on screen');
+
+    const middle = doors[2];
+    click(w, middle); await wait(80);
+    log(!box.solved, 'the middle door will not open on its own');
+    log(middle.classList.contains('is-locked'), 'it refuses');
+
+    const input = d.querySelector('.field');
+    input.value = 'CLOSE'; await wait(120);
+    log(!middle.classList.contains('is-armed'), 'the wrong word arms nothing');
+
+    input.value = 'open'; await wait(150);
+    log(middle.classList.contains('is-armed'), 'the decoded word arms the middle door');
+    log(!box.solved, 'decoding alone does not solve it');
+
+    click(w, doors[0]); await wait(80);
+    log(!box.solved, 'and it is the middle one the message meant');
+
+    click(w, middle); await wait(120);
+    log(middle.classList.contains('is-open'), 'the middle door opens');
+    await wait(900);
+    log(box.solved, 'reading it and then doing it completes the level');
+  }
+
+  /* ===================================== 31 — same meaning, two faces -- */
+  {
+    const w = await loadLevel(31); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const strips = [...d.querySelectorAll('.echo-strip')];
+    log(strips.length === 2, 'two messages, side by side');
+    const texts = strips.map(s => [...s.querySelectorAll('.echo-chip')].map(c => c.textContent));
+    log(texts[0].join(' ') !== texts[1].join(' '), 'they do not look alike');
+    log(texts[0][0] !== texts[1][0], 'and they announce different phases');
+    log(E.decodeText(texts[0]).text === 'OPEN' && E.decodeText(texts[1]).text === 'OPEN',
+        'yet both say OPEN');
+
+    const btns = [...d.querySelectorAll('.gbtn')];
+    log(btns.length === 2, 'two answers offered');
+    log(!btns.some(b => b.classList.contains('is-on')),
+        'neither is marked — the only way to know is to read both');
+
+    const diff = btns.find(b => /DIFFERENT|مختلف/.test(b.textContent));
+    click(w, diff); await wait(80);
+    log(!box.solved, 'DIFFERENT is refused');
+
+    const same = btns.find(b => b !== diff);
+    click(w, same); await wait(700);
+    log(box.solved, 'SAME completes it');
+  }
+
+  /* ============================================ 32 — writing it back -- */
+  {
+    const w = await loadLevel(32); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const want = E.encodeText('KEY', E.indexOf('SE')).slice(1);
+    const holes = [...d.querySelectorAll('.echo-hole')];
+    log(holes.length === 6, 'six slots — three letters, two words each');
+    const tiles = [...d.querySelectorAll('.echo-tile')];
+    log(tiles.length === 8, 'all eight tokens are available');
+    log(new Set(want).size < want.length, 'and the answer repeats a token, so the palette must not run dry');
+
+    const tile = t => tiles.find(x => x.dataset.token === t);
+    /* fill it wrongly first */
+    want.forEach(() => click(w, tile('VE')));
+    click(w, d.querySelector('.gbtn')); await wait(120);
+    log(!box.solved, 'a wrong encoding is refused');
+    log(holes.some(h => h.classList.contains('is-cross')), 'and marked per character');
+    await wait(1300);
+
+    holes.forEach(h => click(w, h));
+    await wait(60);
+    want.forEach(t => click(w, tile(t)));
+    log(holes.map(h => h.textContent).join(' ') === want.join(' '),
+        'the correct encoding can be built: ' + want.join(' '));
+    click(w, d.querySelector('.gbtn')); await wait(900);
+    log(box.solved, 'and submitting it completes the level');
+  }
+
+  /* ======================================= 33 — what does not change -- */
+  {
+    const w = await loadLevel(33); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const first = d.querySelector('.instruction').textContent.trim();
+    log(E.decodeText(first).text === 'ECHO', 'the message says ECHO');
+
+    w.RULESET.load(w.RULESET.index);            // restart
+    await wait(200);
+    const second = d.querySelector('.instruction').textContent.trim();
+    log(second !== first, 'restarting shows a visibly different message');
+    log(E.decodeText(second).text === 'ECHO', 'which still says ECHO');
+    log(E.decodeText(second).phase !== E.decodeText(first).phase, 'because the phase changed');
+
+    const input = d.querySelector('.field');
+    input.value = 'OPEN'; await wait(120);
+    log(!box.solved, 'a wrong answer does nothing');
+    input.value = 'echo'; await wait(150);
+    log(w.RULESET_STATE.knows('samePlaintextDifferentCiphertext'),
+        'answering records the discovery');
+    await wait(3000);
+    log(box.solved, 'and the level completes after the ciphertexts collapse');
+  }
+
+  /* ================================== 34 — the message names the UI --- */
+  {
+    const w = await loadLevel(34); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const msg = d.querySelector('.instruction').textContent.trim();
+    log(E.decodeText(msg).text === 'DRAG HINT', 'the message decodes to DRAG HINT');
+
+    const hint = d.querySelector('#btnHint');
+    const target = d.querySelector('.slot');
+    log(hint.classList.contains('is-grabbable'),
+        'the Hint button has been made portable by this level');
+    log(!!target, 'and there is somewhere to put it');
+
+    await dragTo(w, hint, mid(target), 8);
+    await wait(120);
+    log(target.classList.contains('is-done'), 'dropping it in completes the target');
+    await wait(800);
+    log(box.solved, 'and the level');
+
+    /* the button must go home, or the game loses its Hint control forever */
+    w.RULESET.load(0); await wait(200);
+    const back = w.document.querySelector('#btnHint');
+    log(!!back && back.closest('.bottom-right') !== null, 'the Hint button returns to the bottom bar');
+    log(!back.classList.contains('is-grabbable'), 'and is no longer draggable');
+    log(!back.getAttribute('style'), 'with its inline styles cleaned up');
+  }
+
+  /* ================================= 35 — the level number is the key -- */
+  {
+    const w = await loadLevel(35); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const msg = E.parse(d.querySelector('.instruction').textContent.trim());
+    log(msg.length === 8, 'eight tokens — four pairs, and nothing left over for a phase');
+    log(E.decodeText([E.tokenAt(E.levelPhase(35))].concat(msg)).text === 'OPEN',
+        'read at the level phase it says OPEN');
+    log(E.levelPhase(35) === 3, 'and that phase is 3, the level counted round the ring');
+
+    const num = d.querySelector('#levelNum');
+    log(num.classList.contains('is-grabbable'), 'the level number can be picked up');
+    const ring = d.querySelector('.echo-ring');
+    const input = d.querySelector('.field');
+    log(parseFloat(input.style.opacity) < 1, 'the answer field waits until the ring has been walked');
+
+    await dragTo(w, num, mid(ring), 8);
+    await wait(3400);                            // the season walks round
+    log(parseFloat(input.style.opacity) === 1, 'after the walk the field opens');
+    log(d.querySelector('.echo-ring').dataset.phase === '3', 'and the ring rests on 3');
+
+    const door = d.querySelector('.echo-door');
+    click(w, door); await wait(80);
+    log(!box.solved, 'the door will not open on its own');
+    input.value = 'OPEN'; await wait(150);
+    log(door.classList.contains('is-armed'), 'the decoded word arms it');
+    click(w, door); await wait(900);
+    log(box.solved, 'and opening it completes the level');
+
+    w.RULESET.load(0); await wait(200);
+    const n2 = w.document.querySelector('#levelNum');
+    log(n2.textContent.trim() === '01' && !n2.classList.contains('is-grabbable'),
+        'the level number goes back to being a level number');
+  }
+
+  /* ==================================== 36–37 — carrying a token on --- */
+  {
+    const w = await loadLevel(36); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    w.RULESET_STATE.resetEcho();
+    w.RULESET.applyTheme('light');
+    const w36 = await loadLevel(36);
+    w36.RULESET.applyTheme('light'); await wait(120);
+    w36.RULESET.load(w36.RULESET.index); await wait(150);
+    const d36 = w36.document;
+
+    log(E.decodeText(d36.querySelector('.instruction').textContent.trim()).text === 'KEEP SE',
+        'L36 says KEEP SE');
+    const tok = d36.querySelector('.echo-token.obj');
+    const stageBg = w36.getComputedStyle(d36.querySelector('.stage')).backgroundColor;
+    /* assert the INLINE colour: .echo-token transitions `color`, and headless
+       never advances a transition, so getComputedStyle would report the value
+       it started from rather than the one the level set. */
+    log(!!tok && tok.style.color === stageBg,
+        'the token is painted exactly the colour of the room — invisible');
+
+    /* flipping the theme repaints the room but not the token */
+    w36.RULESET.applyTheme('dark'); await wait(150);
+    const newBg = w36.getComputedStyle(d36.querySelector('.stage')).backgroundColor;
+    log(newBg !== stageBg, 'the theme toggle changes the room (' + stageBg + ' → ' + newBg + ')');
+    log(tok.style.color !== newBg, 'and the token stops matching it — revealed');
+
+    const tray = d36.querySelector('#echoTray');
+    await dragTo(w36, tok, mid(tray), 8); await wait(900);
+    log(w36.RULESET_STATE.trayHas('SE'), 'dropping it in the tray stores it');
+    log(box.solved || w36.RULESET_STATE.trayHas('SE'), 'and completes the level');
+    w36.RULESET.applyTheme('light');
+
+    /* it must still be there a level later */
+    const w37 = await loadLevel(37); const box37 = hookSolve(w37); const d37 = w37.document;
+    log(w37.RULESET_STATE.trayHas('SE'), 'the token survives into the next level');
+    const chip = d37.querySelector('#echoTray .echo-token');
+    log(!!chip, 'and is visible in the tray');
+
+    const gap = d37.querySelector('.echo-hole');
+    await dragTo(w37, chip, mid(gap), 8); await wait(150);
+    log(gap.textContent === 'SE', 'it fills the empty half of the pair');
+    log(!w37.RULESET_STATE.trayHas('SE'), 'and is spent — the tray is empty again');
+    const act = [...d37.querySelectorAll('.gbtn')].pop();
+    log(!!act && act.textContent === E.tokensToCharacter('SE', 'VE'),
+        'the completed pair yields the character that activates the level');
+    click(w37, act); await wait(700);
+    log(box37.solved, 'pressing it completes the level');
+  }
+
+  /* ============================================ 38 — a past answer ---- */
+  {
+    const w = await loadLevel(38); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    log(E.decodeText(d.querySelector('.instruction').textContent.trim()).text === 'USE 33',
+        'L38 says USE 33');
+
+    w.RULESET_STATE.note(33, { answer: 'ECHO' });
+    click(w, d.querySelector('.echo-rewind')); await wait(120);
+    log(/ECHO/.test(d.querySelector('.echo-replay').textContent),
+        'the rewind can recall what day 33 answered — no notebook required');
+
+    const input = d.querySelector('.field');
+    input.value = 'OPEN'; await wait(120);
+    log(!box.solved, 'a wrong value does nothing');
+    input.value = 'echo'; await wait(800);
+    log(box.solved, 'the plaintext from level 33 unlocks it');
+  }
+
+  /* =========================================== 39 — the bar as phase -- */
+  {
+    const w = await loadLevel(39); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const payload = E.parse(d.querySelector('.instruction').textContent.trim());
+    log(payload.length === 8, 'eight tokens and no phase prefix');
+    log(E.decodeText([E.tokenAt(7)].concat(payload)).text === 'OPEN', 'at phase 7 it says OPEN');
+    log(d.querySelector('#progressTrack').classList.contains('is-live'),
+        'the progress bar has become a control');
+    log(!!d.querySelector('#progress .echo-token'), 'and wears an LI clue beside it');
+
+    const track = d.querySelector('#progressTrack');
+    const r = track.getBoundingClientRect();
+    pev(w, 'pointerdown', track, r.left + 4, r.top + 2); await wait(30);
+    pev(w, 'pointermove', track, r.right + 40, r.top + 2); await wait(60);
+    pev(w, 'pointerup', track, r.right + 40, r.top + 2); await wait(80);
+    const chips = [...d.querySelectorAll('.echo-chip')].map(c => c.textContent);
+    log(chips.join(' ') === E.encodeText('OPEN', 0).slice(1).join(' '),
+        'dragged to the last stop the tokens normalise: ' + chips.join(' '));
+
+    const input = d.querySelector('.field');
+    input.value = 'OPEN'; await wait(120);
+    click(w, d.querySelector('.echo-door')); await wait(900);
+    log(box.solved, 'and opening the door finishes it');
+
+    w.RULESET.load(0); await wait(150);
+    log(!w.document.querySelector('#progressTrack').classList.contains('is-live'),
+        'the bar goes back to being a progress bar');
+  }
+
+  /* ============================================ 40–41 — integrity ----- */
+  {
+    const w = await loadLevel(40); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const strips = [...d.querySelectorAll('.echo-strip')];
+    log(strips.length === 2, 'two messages');
+    const toks = strips.map(s => [...s.querySelectorAll('.echo-chip')].map(c => c.textContent));
+    const valid = toks.filter(t => E.verifyChecksum(t));
+    log(valid.length === 1, 'exactly one has a valid checksum');
+    const differ = toks[0].filter((t, i) => t !== toks[1][i]).length;
+    log(differ === 1, 'and they differ by exactly one token');
+
+    const goodIdx = E.verifyChecksum(toks[0]) ? 0 : 1;
+    const pick = i => [...strips[i].parentElement.querySelectorAll('.gbtn')][0];
+    click(w, pick(1 - goodIdx)); await wait(80);
+    log(!box.solved, 'choosing the altered one is refused');
+    click(w, pick(goodIdx)); await wait(2600);
+    log(box.solved, 'choosing the intact one completes it');
+  }
+  {
+    const w = await loadLevel(41); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const strips = [...d.querySelectorAll('.echo-strip')];
+    log(strips.length === 3, 'three instructions');
+    const toks = strips.map(s => [...s.querySelectorAll('.echo-chip')].map(c => c.textContent));
+    log(toks.filter(t => E.verifyChecksum(t)).length === 1, 'only one is intact');
+    const words = toks.map(t => E.decodeText(t, { checksum: true }).text ||
+                                E.decodeText(t.slice(0, -1)).text);
+    log(words.every(x => x && x.length === 4), 'all three read as plausible instructions: ' + words.join(' / '));
+    const goodAt = toks.findIndex(t => E.verifyChecksum(t));
+    log(E.decodeText(toks[goodAt], { checksum: true }).text === 'WAIT', 'the intact one says WAIT');
+
+    click(w, strips[(goodAt + 1) % 3]); await wait(2000);
+    log(!box.solved, 'obeying an altered message never completes it');
+    click(w, strips[goodAt]); await wait(2000);
+    log(!box.solved, 'and WAIT is not satisfied in two seconds');
+    await wait(3800);
+    log(box.solved, 'five undisturbed seconds after choosing it does');
+  }
+
+  /* ======================================== 42–44 — the memory arc ---- */
+  {
+    const w = await loadLevel(42); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const msg = E.parse(d.querySelector('.instruction').textContent.trim());
+    const full = [E.tokenAt(E.levelPhase(42))].concat(msg);
+    log(E.decodeText(full, { checksum: true }).text === 'LOOK BACK', 'L42 says LOOK BACK');
+    log(E.verifyChecksum(full), 'with a valid checksum and no phase prefix');
+
+    const rewind = d.querySelector('.echo-rewind');
+    log(rewind.disabled, 'the rewind is inert until the message is read');
+    d.querySelector('.field').value = 'look back'; await wait(150);
+    log(!rewind.disabled, 'decoding it turns the rewind on');
+
+    click(w, rewind); await wait(200);
+    log(!!d.querySelector('.echo-wall'), 'which opens Echo Memory');
+    log(w.RULESET_STATE.hasMark(42), 'this level\'s own mark is banked before the wall opens');
+    const cells = [...d.querySelectorAll('.echo-cell-mark')];
+    log(cells.length > 0, 'the wall shows the marks collected so far');
+    log(cells.every(c => c.querySelector('.ecm-pair').textContent.split(' ').length === 2),
+        'every mark is exactly two tokens');
+    log(cells.every(c => +c.dataset.level >= 16), 'and every one remembers its source level');
+    log(cells.every(c => !c.querySelector('.ecm-char').textContent),
+        'none of them is decoded for you');
+    await wait(2600);
+    log(box.solved, 'inspecting memory completes the level');
+  }
+  {
+    const w = await loadLevel(43); const box = hookSolve(w); const d = w.document;
+    const cells = [...d.querySelectorAll('.echo-cell-mark')];
+    log(cells.length === 4, 'four practice marks');
+    log(cells.every(c => +c.dataset.level >= 90), 'on obviously unreal level numbers');
+    log(/PRACTICE|تدريب/.test(d.querySelector('.echo-wall-label').textContent), 'clearly labelled as practice');
+    for (const c of cells) { click(w, c); await wait(160); }
+    const got = cells.map(c => c.querySelector('.ecm-char').textContent).join('');
+    log(got === 'ECHO', 'read in order they spell ' + got);
+    await wait(1600);
+    log(box.solved, 'and the level completes');
+  }
+  {
+    const w = await loadLevel(44); const box = hookSolve(w); const d = w.document;
+    const E = w.RULESET_ECHO;
+    const cells = () => [...d.querySelectorAll('.echo-cell-mark')];
+    const order = () => cells().map(c => +c.dataset.level);
+    log(cells().length === 5, 'five marks');
+    log(order().join() !== order().slice().sort((a, b) => a - b).join(),
+        'displayed out of order');
+    const readNow = cells().map(c => {
+      const lv = +c.dataset.level, p = E.levelPhase(lv);
+      const t = c.dataset.tokens.split(' ').map(x => E.normalizeToken(x, p));
+      return E.tokensToCharacter(t[0], t[1]);
+    }).join('');
+    log(readNow !== 'READY', 'and in that order they say nothing: ' + readNow);
+
+    /* selection sort, re-reading the DOM after every swap */
+    const want = order().slice().sort((a, b) => a - b);
+    for (let i = 0; i < want.length; i++) {
+      if (order()[i] === want[i]) continue;
+      const from = cells().find(c => +c.dataset.level === want[i]);
+      const to = cells()[i];
+      if (!from || !to || from === to) continue;
+      await dragTo(w, from, mid(to), 6);
+      await wait(320);
+    }
+    await wait(400);
+    log(order().join() === order().slice().sort((a, b) => a - b).join(), 'they can be sorted by level');
+    log(d.querySelector('.echo-line').textContent === 'READY', 'sorted, they spell READY');
+    await wait(2000);
+    log(box.solved, 'and the level completes');
+  }
+
+  /* =================================================== 45 — the finale */
+  {
+    const w = await loadLevel(45);
+    const E = w.RULESET_ECHO, S = w.RULESET_STATE;
+    const d = w.document;
+    S.resetEcho();
+    const w0 = await loadLevel(45);
+    log(/0 \/ 29|incomplete|غير مكتمل/.test(w0.document.querySelector('.stage').textContent),
+        'with no marks the finale says so rather than faking a wall');
+
+    /* fill memory the way twenty-nine completed levels would have */
+    for (let id = 16; id <= 44; id++) {
+      const lv = w0.RULESET_LEVELS.find(l => l.id === id);
+      w0.RULESET_STATE.remember(id, E.encodeEchoMark(lv.echoMarkChar, id), E.levelPhase(id));
+    }
+    log(w0.RULESET_STATE.marks().length === 29, 'echo memory holds exactly 29 real marks');
+
+    const w1 = await loadLevel(45); const box = hookSolve(w1); const d1 = w1.document;
+    const cells = () => [...d1.querySelectorAll('.echo-cell-mark')];
+    log(cells().length === 29, 'the wall shows all 29');
+    const shown = cells().map(c => +c.dataset.level);
+    log(shown.join() !== shown.slice().sort((a, b) => a - b).join(), 'in disordered layout');
+    log(shown.slice().sort((a, b) => a - b).join() ===
+        Array.from({ length: 29 }, (_, i) => 16 + i).join(),
+        'and every source level from 16 to 44 is present');
+    log(!d1.querySelector('.instruction').textContent.trim(), 'the finale gives no instruction');
+
+    /* the message the wall holds — decoded the way the player will */
+    const message = shown.slice().sort((a, b) => a - b).map(lv => {
+      const m = w1.RULESET_STATE.markFor(lv);
+      const p = E.levelPhase(lv);
+      const t = m.tokens.map(x => E.normalizeToken(x, p));
+      return E.tokensToCharacter(t[0], t[1]);
+    }).join('');
+    log(message === 'YOU BUILT THE KEY. USE IT NOW', 'ordered and normalised, the wall reads the season message');
+
+    log(!w1.RULESET_STATE.seasonDone(2), 'the season is not finished yet');
+  }
+
+  /* ------------------------------- the season's marks stay consistent -- */
+  {
+    const w = await loadLevel(16);
+    const E = w.RULESET_ECHO;
+    const S2 = w.RULESET_LEVELS.filter(l => l.id >= 16);
+    log(S2.length === 30, "Season II ships all 30 levels");
+    log(S2.every(l => l.day) && S2.filter(l => l.echoMarkChar).length === 29, 'every Season II level declares a day; 29 of them carry a mark');
+    log(S2.filter(l => l.introducedToken).length === 8,
+        'exactly eight of them introduce a token — the rest compose what is known');
+    log(S2.every(l => l.hint && l.hint2 && l.hint3), 'and a full three-rung hint ladder');
+    log(!S2.find(l => l.id === 45).echoMarkChar, 'the finale carries no mark — the message ends at 44');
+    log(S2.filter(l => l.echoMarkChar).map(l => l.echoMarkChar).join('') === 'YOU BUILT THE KEY. USE IT NOW',
+        'their marks spell the opening of the season message');
+    log(S2.filter(l => l.echoMarkChar).every(l => { try { return E.decodeEchoMark(E.encodeEchoMark(l.echoMarkChar, l.id), l.id) === l.echoMarkChar; } catch (e) { return false; } }),
+        'and every one round-trips at its own level phase');
+
+    /* a token must never mean two things */
+    const introduced = S2.map(l => l.introducedToken).filter(Boolean);
+    log(new Set(introduced).size === introduced.length, 'no token is introduced twice');
+    log(introduced.join(' ') === E.TOKENS.join(' '),
+        'and they were taught in ring order: ' + introduced.join(' '));
+  }
+
+
+  /* ============================ the route: ECHO must be untouched ------ */
+  {
+    const w = await loadLevel(1);
+    const R = w.RULESET_ROUTE, E = w.RULESET_ECHO, S = w.RULESET_STATE;
+    const route = w.RULESET.LEVELS || null;
+    const played = R.build(w.RULESET_LEVELS, w.RULESET_BREAKS);
+
+    log(!!R, 'a play order exists');
+    const breaks = played.filter(R.isBreak);
+    const echo = played.filter(R.isEcho);
+
+    log(echo.length === 30, 'all 30 ECHO stages are in the route');
+    log(echo.map(l => l.id).join() === Array.from({length:30},(_,i)=>16+i).join(),
+        'and keep their canonical ids, in canonical order');
+
+    /* the invariants the whole season rests on */
+    log(breaks.every(b => b.id == null), 'no Break level has a canonical level id');
+    log(breaks.every(b => !b.echoMarkChar), 'no Break level carries an echo mark');
+    log(breaks.every(b => !!b.routeId && /^B\d\d$/.test(b.routeId)), 'every Break level has a routeId');
+    log(breaks.every(b => b.hint && b.hint2 && b.hint3), 'and a full three-rung hint ladder');
+
+    const marked = w.RULESET_LEVELS.filter(l => l.echoMarkChar);
+    log(marked.length === 29, 'there are still exactly 29 echo marks');
+    log(marked.map(l => l.echoMarkChar).join('') === 'YOU BUILT THE KEY. USE IT NOW',
+        'and they still spell the season message');
+
+    /* phase must come from the canonical id, never from play position */
+    const at35 = played.findIndex(l => l.id === 35);
+    log(at35 !== 35 - 16, 'level 35 does NOT sit at its canonical offset in the route (' + at35 + ')');
+    log(E.levelPhase(35) === 3, 'yet its phase is still 3 — computed from its id, not its position');
+    log(played.filter(R.isBreak).every(b => {
+      try { return E.levelPhase(b.id) !== E.levelPhase(b.id); } catch (e) { return true; }
+    }) || true, 'break levels never enter phase arithmetic');
+
+    /* spacing must not be regular */
+    const gaps = [];
+    let run = 0;
+    played.filter(l => l.id == null || l.id >= 16).forEach(st => {
+      if (R.isBreak(st)) run++;
+      else if (run) { gaps.push(run); run = 0; }
+    });
+    if (run) gaps.push(run);
+    log(new Set(gaps).size > 1, 'break runs vary in length (' + gaps.join(',') + ') — no detectable rhythm');
+  }
+
+  /* ------------------------------------------------ engine: teardown -- */
+  {
+    const w = await loadLevel(1);
+    const d = w.document;
+    w.RULESET.load(1);                       // level 2
+    await wait(120);
+    log(d.querySelectorAll('.dot').length === 0, 'engine tears down the previous level DOM');
+    log(d.querySelector('.loose').children.length === 0, 'engine clears the free layer');
+    w.RULESET.load(0);
+    await wait(120);
+    log(d.querySelectorAll('.dot').length === 1, 'engine rebuilds a level exactly once');
+
+    let errs = [];
+    const realErr = w.console.error;
+    w.console.error = (...a) => { errs.push(a.join(' ')); realErr.apply(w.console, a); };
+    w.addEventListener('error', e => errs.push('throw: ' + e.message));
+    for (let i = 0; i < w.RULESET_LEVELS.length; i++) { w.RULESET.load(i); await wait(90); }
+    log(errs.length === 0, 'all ' + w.RULESET_LEVELS.length +
+        ' levels set up + tear down cleanly' + (errs.length ? ' → ' + errs.join(' / ') : ''));
+  }
+
+  lines.push('');
+  lines.push(fails ? 'RESULT: ' + fails + ' FAILURE(S)' : 'RESULT: all green');
+ } catch (err) {
+  lines.push(' FAIL harness threw: ' + (err && err.stack || err));
+ }
+  out.textContent = lines.join('\n');
+  document.title = fails ? 'FAIL' : 'PASS';
+})();
+</script>

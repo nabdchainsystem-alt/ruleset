@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>GLOBAL SEA — test harness</title>
+<style>
+  body { font: 13px/1.6 ui-monospace, monospace; margin: 0; padding: 12px; background:#0b0d12; color:#c8ccd4; }
+  iframe { width: 1280px; height: 800px; border: 1px solid #333; }
+  #out { white-space: pre; }
+  .ok { color: #3ddba1; } .bad { color: #ff6b5e; font-weight: 700; }
+</style>
+<div id="out">running…</div>
+<iframe id="f" src="global.html"></iframe>
+<script>
+const out = document.getElementById('out');
+const f = document.getElementById('f');
+const lines = [];
+let fails = 0;
+function log(ok, msg) {
+  if (!ok) fails++;
+  lines.push((ok ? '  ok  ' : ' FAIL ') + msg);
+  out.innerHTML = lines.map(l =>
+    '<span class="' + (l[1] === 'o' ? 'ok' : 'bad') + '">' + l + '</span>').join('\n');
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+/* Headless composites almost no frames, so the page's own rAF loop stalls.
+   Every test drives SEA.app.tick() by hand instead — which also makes the
+   physics deterministic rather than dependent on real frame timing. */
+function run(A, frames, dt) {
+  for (let i = 0; i < (frames || 1); i++) A.tick(dt || 1 / 60);
+}
+
+function pev(w, el, type, x, y, id) {
+  el.dispatchEvent(new w.PointerEvent(type, {
+    clientX: x, clientY: y, pointerId: id || 1, isPrimary: true, pointerType: 'mouse',
+    button: 0, buttons: type === 'pointerup' ? 0 : 1,
+    bubbles: true, cancelable: true, composed: true
+  }));
+}
+
+(async function () {
+ try {
+  const w = f.contentWindow;
+  await new Promise(r => (f.contentWindow.document.readyState === 'complete' ? r() : f.onload = r));
+  await wait(250);
+
+  const A = w.SEA.app;
+  const P = w.SEA.Physics;
+  const M = w.SEA.Messages;
+  const d = w.document;
+
+  /* ------------------------------------------------------------ sizing -- */
+  {
+    const short = M.measure('nova', 'hi', '21:00');
+    const long  = M.measure('nova', 'this is a considerably longer message that has to wrap', '21:00');
+    log(short.w >= 96 && short.w < long.w, 'bubble width adapts to message length (' + short.w + ' vs ' + long.w + ')');
+    log(long.lines.length > 1 && long.h > short.h, 'long messages wrap and grow taller');
+    const emoji = M.measure('nova', '🔥', '21:00');
+    log(emoji.big === true, 'emoji-only messages are rendered large');
+  }
+
+  /* ------------------------------------------------------------- spawn -- */
+  A.clearSea();
+  {
+    const b = A.spawn({ username: 'tester', text: 'hello sea' });
+    run(A, 2);
+    log(A.world.bodies.length === 1, 'a message enters the world');
+    log(!!b.el && d.querySelector('.msg'), 'and mounts a DOM bubble');
+    log(b.y < 60, 'new messages arrive from above');
+    run(A, 40);
+    log(b.y > 0, 'and fall into the sea');
+  }
+
+  /* -------------------------------------------------------- collisions -- */
+  A.clearSea();
+  {
+    const a = A.spawn({ username: 'a', text: 'left one here' });
+    const b = A.spawn({ username: 'b', text: 'right one here' });
+    a.x = 400; a.y = 400; a.vx = a.vy = 0;
+    b.x = 404; b.y = 402; b.vx = b.vy = 0;      // almost exactly on top of each other
+    run(A, 90);
+    const gapX = Math.abs(a.x - b.x) - (a.hw + b.hw);
+    const gapY = Math.abs(a.y - b.y) - (a.hh + b.hh);
+    log(gapX > -1 || gapY > -1, 'overlapping messages push each other apart');
+  }
+
+  /* --------------------------------------------------- spatial hashing -- */
+  {
+    /* Two separate claims, and they need separate setups.
+
+       (a) At constant DENSITY, pair count must grow linearly with n. Testing
+           this in one fixed viewport would be meaningless: 400 bubbles in
+           1440×900 are packed ~4× over capacity, so neighbour count really
+           does rise with n and even a perfect grid looks quadratic. So the
+           world is grown along with the population. */
+    const W = A.world.w, H = A.world.h;
+    A.clearSea();
+    A.world.setBounds(2600, 1800);
+    A.sim.burst(200);
+    run(A, 4);
+    const n1 = A.world.bodies.length, p1 = A.world.stats.pairs;
+
+    A.world.setBounds(3676, 2545);            // ×2 area for ×2 bodies
+    A.sim.burst(200);
+    run(A, 4);
+    const n2 = A.world.bodies.length, p2 = A.world.stats.pairs;
+
+    const growth = p2 / Math.max(1, p1);
+    log(growth < 2.6, 'at constant density the broad phase is linear: ' + n1 + '→' + n2 +
+        ' bodies grew pairs ' + p1 + '→' + p2 + ' (×' + growth.toFixed(1) +
+        '; quadratic would be ×4)');
+
+    /* (b) In the crowded real viewport it must still cull hard versus the
+           brute-force n²/2 every pair would cost. */
+    A.clearSea();
+    A.world.setBounds(W, H);
+    A.sim.burst(400);
+    run(A, 4);
+    const n = A.world.bodies.length, pairs = A.world.stats.pairs;
+    const brute = n * (n - 1) / 2;
+    log(pairs < brute / 6, 'and it culls a crowded sea: ' + pairs.toLocaleString() +
+        ' pairs tested instead of ' + brute.toLocaleString() +
+        ' (' + (100 * pairs / brute).toFixed(1) + '%)');
+  }
+
+  /* ------------------------------------------------- replies + tethers -- */
+  A.clearSea();
+  {
+    const parent = A.spawn({ username: 'root', text: 'the parent message' });
+    parent.x = 600; parent.y = 400;
+    const child = A.spawn({ username: 'kid', text: 'a reply', parent });
+    log(A.world.links.length === 1, 'a reply creates a tether');
+    log(child.threadId === parent.threadId, 'the reply joins its parent thread');
+    log(child.depth === parent.depth + 1, 'thread depth increments');
+
+    const grand = A.spawn({ username: 'kid2', text: 'reply to the reply', parent: child });
+    log(A.world.links.length === 2 && grand.threadId === parent.threadId,
+        'replies to replies work and stay in the thread');
+
+    // pull the child far away; the spring should reel it back in
+    child.x = parent.x + 700; child.y = parent.y;
+    const far = Math.hypot(child.x - parent.x, child.y - parent.y);
+    run(A, 150);
+    const near = Math.hypot(child.x - parent.x, child.y - parent.y);
+    log(near < far * 0.7, 'the tether is elastic — a stretched reply is pulled back (' +
+        Math.round(far) + 'px → ' + Math.round(near) + 'px)');
+    log(near > 30, 'but it does not collapse onto its parent');
+  }
+
+  /* ----------------------------------------------------------- dragging -- */
+  {
+    A.clearSea();
+    const b = A.spawn({ username: 'drag', text: 'drag me somewhere' });
+    b.x = 300; b.y = 300; b.vx = b.vy = 0;
+    run(A, 2);
+    const el = b.el;
+    pev(w, el, 'pointerdown', 300, 300);
+    log(b.dragging === true, 'pointer down begins a drag');
+    pev(w, el, 'pointermove', 500, 420);
+    run(A, 1);
+    log(Math.abs(b.x - 500) < 3 && Math.abs(b.y - 420) < 3, 'the bubble follows the pointer exactly');
+    pev(w, el, 'pointermove', 560, 420);
+    pev(w, el, 'pointerup', 560, 420);
+    log(b.dragging === false, 'pointer up ends the drag');
+    log(Math.abs(b.vx) > 100, 'releasing while moving throws it (' + Math.round(b.vx) + ' px/s)');
+  }
+
+  /* ---------------------------------------------------------- selection -- */
+  {
+    A.clearSea();
+    const b = A.spawn({ username: 'sel', text: 'select me' });
+    b.x = 400; b.y = 300;
+    run(A, 2);
+    pev(w, b.el, 'pointerdown', 400, 300);
+    pev(w, b.el, 'pointerup', 400, 300);          // no movement → a click
+    log(A.ui.selected === b, 'a click without movement selects');
+    log(b.el.className.indexOf('is-sel') >= 0, 'the selected bubble is highlighted');
+    log(!d.getElementById('tools').hidden, 'the tool bar appears');
+
+    d.getElementById('replyInput').value = 'a typed reply';
+    d.getElementById('replybox').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    log(A.world.bodies.length === 2, 'replying from the composer creates a message');
+    log(A.world.links.length === 1, 'and tethers it to the selected message');
+  }
+
+  /* -------------------------------------------------------- thread focus -- */
+  {
+    A.clearSea();
+    const p = A.spawn({ username: 'p', text: 'thread root' });
+    const c = A.spawn({ username: 'c', text: 'in thread', parent: p });
+    const other = A.spawn({ username: 'o', text: 'unrelated' });
+    run(A, 2);
+    A.ui.focusThread(p.threadId);
+    log(d.getElementById('seaDom').classList.contains('is-focus'), 'focus mode dims the sea');
+    log(p.el.classList.contains('is-lit') && c.el.classList.contains('is-lit'),
+        'the whole thread stays lit');
+    log(!other.el.classList.contains('is-lit'), 'unrelated messages are not lit');
+    A.ui.focusThread(null);
+    log(!d.getElementById('seaDom').classList.contains('is-focus'), 'clicking out leaves focus mode');
+  }
+
+  /* ------------------------------------------------------------- argument -- */
+  {
+    A.clearSea();
+    const a = A.spawn({ username: 'a', text: 'you are wrong' });
+    const b = A.spawn({ username: 'b', text: 'you are wrong' });
+    a.x = 400; a.y = 400; a.vx = a.vy = 0;
+    b.x = 800; b.y = 400; b.vx = b.vy = 0;
+    run(A, 2);
+    A.ui.startArgue(a, b);
+    log(!!A.world.argue, 'argument mode engages');
+
+    const start = Math.abs(a.x - b.x);
+    run(A, 60);
+    log(Math.abs(a.x - b.x) < start, 'the two charge at each other');
+
+    run(A, 400);
+    log(A.world.argue.hits > 0, 'they collide and recoil (' + A.world.argue.hits + ' bumps)');
+    log(Math.abs(a.x - b.x) > 20, 'and never merge into one another');
+
+    // a reply hanging off a combatant should get shaken about
+    const child = A.spawn({ username: 'c', text: 'stop fighting', parent: a });
+    child.vx = child.vy = 0;
+    run(A, 120);
+    log(Math.hypot(child.vx, child.vy) > 1, 'replies wobble when their parent is bumped');
+
+    d.getElementById('btnStopArgue').click();
+    log(!A.world.argue, 'the stop button ends it');
+  }
+
+  /* ------------------------------------------------------------ lifecycle -- */
+  {
+    A.clearSea();
+    const b = A.spawn({ username: 'old', text: 'ancient message' });
+    run(A, 2);
+    log(b.tier === P.TIER.ACTIVE && !!b.el, 'a fresh message is ACTIVE and readable');
+
+    b.born = Date.now() - (A.cfg.calmAfter + 5) * 1000;
+    run(A, 2);
+    log(b.tier === P.TIER.CALM, 'it becomes CALM with age');
+    log(!!b.el, 'CALM messages are still readable');
+
+    b.born = Date.now() - (A.cfg.archiveAfter + 5) * 1000;
+    run(A, 2);
+    log(b.tier === P.TIER.ARCHIVED, 'and eventually ARCHIVED');
+    log(!b.el, 'archived messages give their DOM node back');
+    log(M.poolSize() > 0, 'and the node returns to the pool for reuse');
+  }
+
+  /* -------------------------------------------------------- the DOM cap -- */
+  {
+    A.clearSea();
+    A.cfg.maxDom = 60;
+    A.sim.burst(300);
+    run(A, 6);
+    const nodes = d.querySelectorAll('.msg').length;
+    log(nodes <= 62, 'the DOM stays capped at ' + A.cfg.maxDom + ' bubbles (' + nodes + ' nodes for ' +
+        A.world.bodies.length + ' messages)');
+    A.cfg.maxDom = 420;
+  }
+
+  /* ------------------------------------------------------------- bounds -- */
+  {
+    A.clearSea();
+    const b = A.spawn({ username: 'x', text: 'escape artist' });
+    b.x = 100; b.y = 100; b.vx = -8000; b.vy = -8000;
+    run(A, 120);
+    log(b.x >= 0 && b.y >= 0 && b.x <= A.world.w && b.y <= A.world.h,
+        'messages can never escape the viewport');
+  }
+
+  /* ------------------------------------------------------- degrade path -- */
+  {
+    A.ui.setDegrade(1);
+    log(A.world.cfg.calmCollisions === false, 'degrading drops calm-vs-calm collisions first');
+    A.ui.setDegrade(0);
+    log(A.world.cfg.calmCollisions === true, 'and restores them when the frame rate recovers');
+  }
+
+  /* --------------------------------------------------------- stress test -- */
+  {
+    A.clearSea();
+    let stages = 0, done = null;
+    const st = w.SEA.Sim.createStressTest({
+      count: () => A.world.bodies.length,
+      fps: () => 60,
+      fill(n) {
+        const have = A.world.bodies.length;
+        if (have < n) A.sim.burst(n - have);
+      },
+      onStage() { stages++; },
+      onDone(r) { done = r; }
+    });
+    st.begin();
+    log(stages === 1, 'the stress test enters its first stage');
+    // fast-forward through every stage
+    const t0 = w.performance.now();
+    let guard = 0;
+    while (st.running && guard++ < 4000) {
+      st.update();
+      await wait(12);
+    }
+    log(!!done, 'the stress test completes all stages');
+    log(done && done.results.length === w.SEA.Sim.STAGES.length, 'it records a result per stage');
+    log(done && done.recommended > 0, 'and recommends an active limit (' +
+        (done ? done.recommended.toLocaleString() : '?') + ' at a simulated 60fps)');
+  }
+
+  lines.push('');
+  lines.push(fails ? 'RESULT: ' + fails + ' FAILURE(S)' : 'RESULT: all green');
+ } catch (err) {
+  lines.push(' FAIL harness threw: ' + (err && err.stack || err));
+ }
+ out.textContent = lines.join('\n');
+ document.title = fails ? 'FAIL' : 'PASS';
+})();
+</script>
